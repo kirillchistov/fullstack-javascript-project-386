@@ -1,0 +1,20 @@
+# Автоматизация релизов: release-please анализирует Conventional Commits
+# в main и поддерживает release-PR с changelog и новой semver-версией.
+# Мёрдж release-PR создаёт GitHub Release и тег.
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          release-type: node

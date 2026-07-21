@@ -123,10 +123,10 @@ export default function BookingPage() {
           onClick={() => {
             setStep('pick');
             setBooking(null);
-            setSelectedSlot(null);
             setGuestName('');
             setGuestEmail('');
             setComment('');
+            if (date) loadSlots(date); // список мог устареть после бронирования
           }}
         >
           Забронировать ещё одну встречу
