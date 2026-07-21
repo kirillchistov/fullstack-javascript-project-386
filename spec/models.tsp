@@ -9,6 +9,7 @@ namespace CallCalendar;
 // ---------------------------------------------------------------------------
 
 /** Владелец календаря. В MVP владелец один, создаётся при инициализации приложения. */
+@example(#{ id: 1, name: "Кирилл Чистов", email: "owner@example.com" })
 model Owner {
   id: int32;
 
@@ -20,6 +21,12 @@ model Owner {
 }
 
 /** Тип события — то, на что гость записывается (например, «Вводный звонок») */
+@example(#{
+  id: 1,
+  name: "Вводный звонок",
+  description: "Знакомство и обсуждение задачи",
+  durationMinutes: 30,
+})
 model EventType {
   id: int32;
 
@@ -51,6 +58,13 @@ model AvailabilityRule {
 }
 
 /** Настройки доступности владельца: часовой пояс + набор недельных правил */
+@example(#{
+  timezone: "Europe/Moscow",
+  rules: #[
+    #{ weekday: 1, startTime: "10:00", endTime: "18:00" },
+    #{ weekday: 3, startTime: "10:00", endTime: "14:00" }
+  ],
+})
 model Availability {
   /** Часовой пояс владельца, IANA-идентификатор (например, Europe/Moscow) */
   timezone: string;
@@ -62,6 +76,10 @@ model Availability {
  * Свободный 30-минутный слот. Вычисляется на лету из правил доступности
  * за вычетом активных бронирований — в базе не хранится.
  */
+@example(#{
+  startsAt: utcDateTime.fromISO("2026-07-27T10:00:00Z"),
+  endsAt: utcDateTime.fromISO("2026-07-27T10:30:00Z"),
+})
 model Slot {
   /** Начало слота, UTC */
   startsAt: utcDateTime;
@@ -76,6 +94,17 @@ enum BookingStatus {
 }
 
 /** Бронирование: гость занял конкретный слот под конкретный тип события */
+@example(#{
+  id: 1,
+  eventTypeId: 1,
+  startsAt: utcDateTime.fromISO("2026-07-27T10:00:00Z"),
+  endsAt: utcDateTime.fromISO("2026-07-27T10:30:00Z"),
+  guestName: "Иван Петров",
+  guestEmail: "ivan@example.com",
+  comment: "Хочу обсудить проект",
+  status: BookingStatus.active,
+  createdAt: utcDateTime.fromISO("2026-07-21T12:00:00Z"),
+})
 model Booking {
   id: int32;
 

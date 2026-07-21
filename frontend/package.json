@@ -1,0 +1,36 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:demo": "tsc -b && vite build --mode demo --base=/fullstack-javascript-project-386/",
+    "preview:demo": "vite preview --base=/fullstack-javascript-project-386/",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "api:types": "openapi-typescript ../docs/api/openapi.yaml -o src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "@mantine/core": "^9.4.2",
+    "@mantine/dates": "^9.4.2",
+    "@mantine/hooks": "^9.4.2",
+    "@mantine/notifications": "^9.4.2",
+    "dayjs": "^1.11.21",
+    "openapi-fetch": "^0.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "openapi-typescript": "^7.13.0",
+    "oxlint": "^1.71.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.1.1"
+  }
+}

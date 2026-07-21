@@ -14,47 +14,53 @@
 - [скриншот 2](https://ru.hexlet.io/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDAyNzAsInB1ciI6ImJsb2JfaWQifX0=--0f2aba7342f8e0c41e57654f9e42a97168c992ac/02-book-catalog.png)
 - [скриншот 3](https://ru.hexlet.io/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDAyNzEsInB1ciI6ImJsb2JfaWQifX0=--92dd20c775a06903f40568b5d0b46d445f95e050/03-book-event-type.png)
 
-## Пример
-- [Задеплоенное приложение]() — здесь добавлю ссылку после деплоя
+## Демо
+
+- [Демо на GitHub Pages](https://kirillchistov.github.io/fullstack-javascript-project-386/) — упрощённая версия: API эмулируется прямо в браузере (слоты вычисляются из правил доступности, брони живут в localStorage). Для входа владельца подойдут любые email и пароль.
+- Деплой автоматический: workflow [deploy-pages.yml](./.github/workflows/deploy-pages.yml) собирает `npm run build:demo` при пуше в `main` (в настройках репозитория Pages должен быть переключён на «GitHub Actions»).
+- [Задеплоенное полное приложение]() — здесь появится ссылка после деплоя бэкенда
 
 ## Установка
 
 ```bash
-cp .env.example .env   # если ещё не создан
-npm install --legacy-peer-deps
-make setup
+npm install            # корень: TypeSpec + Prism
+cd frontend && npm install   # фронтенд: Vite + React + Mantine
 ```
 
+## Разработка (фронтенд + мок API)
 
-Команда скопирует `.env.example` в `.env`, установит зависимости, выполнит миграции и соберёт фронтенд.
+Пока бэкенд не реализован, фронтенд работает с Prism — мок-сервером, который отвечает строго по контракту `docs/api/openapi.yaml`.
 
-## Запуск
+Терминал 1 — мок API на порту 5001:
 
 ```bash
-make setup
-make start
+npm run api:mock
 ```
 
-Или напрямую:
+Терминал 2 — dev-сервер фронтенда:
 
 ```bash
-npm run start:dev
+cd frontend
+npm run dev
 ```
 
-Приложение доступно на [http://localhost:5001](http://localhost:5001) (порт задаётся в `.env`, по умолчанию 5001).
+Интерфейс доступен на [http://localhost:5173](http://localhost:5173). Запросы `/api/*` проксируются на `http://localhost:5001` — туда же позже встанет реальный бэкенд, фронтенд менять не придётся (можно переопределить адрес переменной `API_PROXY_TARGET`).
 
-## Разработка
-
-С hot-reload backend и webpack watch в одном терминале:
+## Работа с контрактом
 
 ```bash
-make develop
+npm run spec:build           # spec/*.tsp -> docs/api/openapi.yaml
+cd frontend && npm run api:types   # openapi.yaml -> src/api/schema.d.ts (типы клиента)
 ```
 
-## Тесты
+После любого изменения контракта выполняются обе команды — фронтенд узнаёт об изменениях через типы, несоответствия ловит компилятор TypeScript.
+
+## Сборка фронтенда
 
 ```bash
-make test
+cd frontend && npm run build        # проверка типов + прод-сборка в frontend/dist
+cd frontend && npm run build:demo   # демо-сборка для GitHub Pages (VITE_DEMO=true, base-путь репозитория)
+cd frontend && npm run preview:demo # локальный предпросмотр демо-сборки
 ```
 
 
@@ -69,7 +75,10 @@ make test
 ### Шаг 4
 - [ ] 
 ### Шаг 3
-- [ ] 
+- [x] Выбрать стек для фронт-энда — TypeScript + Vite + React + [Mantine](https://mantine.dev/) (обоснование в [project-spec.md](./project-spec.md)).
+- [x] Реализовать страницы интерфейса — бронирование для гостя, вход, встречи и доступность для владельца ([frontend/src/pages](./frontend/src/pages)).
+- [x] Подключить интерфейс к API по контракту — типизированный клиент [openapi-fetch](https://openapi-ts.dev/openapi-fetch/) с типами, сгенерированными из `openapi.yaml`; для разработки — мок-сервер [Prism](https://stoplight.io/open-source/prism) (`npm run api:mock`).
+- [x] Результат: появился UI приложения.
 
 ### Шаг 2
 - [x] С помощью [TypeSpec](https://typespec.io/) описать доменные сущности: владелец, тип события, слот, бронирование и публичный сценарий гостя — [spec/models.tsp](./spec/models.tsp).
