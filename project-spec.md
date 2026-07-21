@@ -27,6 +27,7 @@
 | Демо (GitHub Pages) | Встроенный мок в браузере (`frontend/src/api/demo.ts`) | Pages — статический хостинг, поэтому в демо-сборке (`npm run build:demo`, `VITE_DEMO=true`) в клиент подставляется fetch-обработчик, реализующий контракт в памяти: слоты вычисляются из правил, брони — в localStorage. Роутинг — hash-based (нет серверных перезаписей путей). Основной код UI одинаков во всех режимах — меняется только транспорт. |
 | Сессия | Cookie-сессия (`@fastify/secure-session` или `@fastify/session`) | Один владелец, SPA и API на одном origin — cookie проще и безопаснее JWT (нечего хранить в localStorage). В контракте описана как apiKey-in-cookie `session`. |
 | Контракт | TypeSpec → OpenAPI 3 | См. раздел 1. |
+| Деплой | Docker (один образ) + Render | Multi-stage `Dockerfile`: фронтенд собирается в статику, Fastify раздаёт её вместе с API на одном порту из `PORT` — фронтенд и API на одном origin, cookie-сессия работает без CORS-настроек. Render разворачивает образ по `render.yaml`. |
 
 ## 3. Доменная модель
 

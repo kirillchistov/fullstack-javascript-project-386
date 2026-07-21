@@ -1,0 +1,19 @@
+# Blueprint для деплоя на Render (https://render.com/docs/blueprint-spec).
+# Render собирает образ по Dockerfile и передаёт приложению порт через PORT.
+services:
+  - type: web
+    name: call-calendar
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/event-types
+    envVars:
+      # Пароль владельца задаётся в дашборде Render, в репозитории его нет
+      - key: OWNER_PASSWORD
+        sync: false
+      - key: OWNER_EMAIL
+        value: owner@example.com
+      - key: OWNER_NAME
+        value: Кирилл Чистов
+      - key: OWNER_TIMEZONE
+        value: Europe/Moscow

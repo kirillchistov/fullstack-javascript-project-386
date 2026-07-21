@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/test-results
+**/playwright-report
+.git
+.github
+e2e
+terminals
+*.md
+.env*

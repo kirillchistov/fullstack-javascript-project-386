@@ -1,5 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import fastifyStatic from '@fastify/static';
 import addFormats from 'ajv-formats';
 import dayjs from 'dayjs';
 import { componentSchemas, ref } from './contract.js';
@@ -23,6 +26,19 @@ export function buildApp({ logger = false } = {}) {
   });
 
   app.register(cookie);
+
+  // В продакшене (Docker) Fastify раздаёт собранный фронтенд:
+  // статика + SPA-fallback на index.html для всех не-API путей.
+  const staticDir = process.env.STATIC_DIR;
+  if (staticDir && fs.existsSync(staticDir)) {
+    app.register(fastifyStatic, { root: path.resolve(staticDir) });
+    app.setNotFoundHandler((request, reply) => {
+      if (request.method === 'GET' && !request.url.startsWith('/api/')) {
+        return reply.sendFile('index.html');
+      }
+      return reply.code(404).send({ code: 'not_found', message: 'Маршрут не найден' });
+    });
+  }
 
   const store = createStore();
   app.decorate('store', store);
