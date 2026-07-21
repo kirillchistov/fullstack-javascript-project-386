@@ -1,0 +1,20 @@
+{
+  "name": "backend",
+  "version": "0.1.0",
+  "description": "Call Calendar API — бэкенд по контракту docs/api/openapi.yaml",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "ajv-formats": "^3.0.1",
+    "dayjs": "^1.11.21",
+    "fastify": "^5.10.0",
+    "js-yaml": "^5.2.1"
+  }
+}
