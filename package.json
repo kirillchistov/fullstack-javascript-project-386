@@ -1,0 +1,21 @@
+{
+  "name": "call-calendar",
+  "version": "0.1.0",
+  "description": "Запись на звонок — сервис бронирования времени (Hexlet fullstack project)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spec:build": "tsp compile spec"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kirillchistov/fullstack-javascript-project-386"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@typespec/compiler": "^1.14.0",
+    "@typespec/http": "^1.14.0",
+    "@typespec/openapi": "^1.14.0",
+    "@typespec/openapi3": "^1.14.0"
+  }
+}
