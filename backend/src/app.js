@@ -8,7 +8,6 @@ import dayjs from 'dayjs';
 import { componentSchemas, ref } from './contract.js';
 import { createStore } from './store.js';
 import {
-  MAX_RANGE_DAYS,
   SLOT_MINUTES,
   computeFreeSlots,
   isFreeSlot,
@@ -61,7 +60,9 @@ export function buildApp({ logger = false } = {}) {
     done();
   };
 
-  // Ошибки валидации схем — в формате ValidationError из контракта
+  // Ошибки в формате контракта. Статус не теряется: ошибки Fastify со своим
+  // statusCode (битый JSON — 400, неверный content-type — 415 и т. п.)
+  // возвращаются как есть; 500 — только для настоящих внутренних ошибок.
   app.setErrorHandler((error, request, reply) => {
     if (error.validation) {
       reply.code(422).send({
@@ -74,8 +75,20 @@ export function buildApp({ logger = false } = {}) {
       });
       return;
     }
-    request.log?.error?.(error);
-    reply.code(500).send({ code: 'internal_error', message: 'Внутренняя ошибка сервера' });
+
+    const statusCode =
+      Number.isInteger(error.statusCode) && error.statusCode >= 400 ? error.statusCode : 500;
+
+    if (statusCode >= 500) {
+      request.log?.error?.(error);
+      reply.code(500).send({ code: 'internal_error', message: 'Внутренняя ошибка сервера' });
+      return;
+    }
+
+    reply.code(statusCode).send({
+      code: 'bad_request',
+      message: error.message || 'Некорректный запрос',
+    });
   });
 
   // --- Сессия владельца ---------------------------------------------------
@@ -129,13 +142,13 @@ export function buildApp({ logger = false } = {}) {
     },
     (request, reply) => {
       const { from, to } = request.query;
-      const rangeDays = dayjs(to).diff(dayjs(from), 'day');
-      if (rangeDays < 0 || rangeDays > MAX_RANGE_DAYS) {
+      if (dayjs(to).isBefore(dayjs(from))) {
         return reply.code(422).send({
           code: 'validation_error',
-          message: `Период должен быть от 1 до ${MAX_RANGE_DAYS} дней, from не позже to`,
+          message: 'Начало периода (from) не может быть позже конца (to)',
         });
       }
+      // Период дальше горизонта не ошибка: computeFreeSlots обрежет его сам
       return computeFreeSlots({
         availability: store.getAvailability(),
         activeBookings: store.getActiveBookings(),

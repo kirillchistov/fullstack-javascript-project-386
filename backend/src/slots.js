@@ -7,24 +7,30 @@ dayjs.extend(timezone);
 
 export const SLOT_MINUTES = 30;
 
-/** Максимальный период запроса слотов, чтобы не считать бесконечные диапазоны */
-export const MAX_RANGE_DAYS = 62;
+/** Горизонт бронирования: слоты доступны на 14 дней вперёд, включая сегодняшний */
+export const BOOKING_HORIZON_DAYS = 14;
 
 /**
  * Свободные 30-минутные слоты за период [from, to] (даты в таймзоне владельца).
  * Правила доступности разворачиваются в слоты, из них вычитаются
- * активные бронирования и прошедшее время. Возвращает UTC ISO-интервалы.
+ * активные бронирования и прошедшее время. Период автоматически обрезается
+ * горизонтом бронирования: [сегодня, сегодня + 13 дней] в таймзоне владельца.
+ * Возвращает UTC ISO-интервалы.
  */
 export function computeFreeSlots({ availability, activeBookings, from, to, now = dayjs() }) {
   const { timezone: tz, rules } = availability;
   const bookedStarts = new Set(activeBookings.map((b) => Date.parse(b.startsAt)));
   const slots = [];
 
-  for (
-    let day = dayjs.tz(from, tz);
-    !day.isAfter(dayjs.tz(to, tz), 'day');
-    day = day.add(1, 'day')
-  ) {
+  const todayInTz = dayjs.tz(now.toISOString(), tz).startOf('day');
+  const horizonEnd = todayInTz.add(BOOKING_HORIZON_DAYS - 1, 'day');
+
+  let start = dayjs.tz(from, tz);
+  if (start.isBefore(todayInTz, 'day')) start = todayInTz;
+  let finish = dayjs.tz(to, tz);
+  if (finish.isAfter(horizonEnd, 'day')) finish = horizonEnd;
+
+  for (let day = start; !day.isAfter(finish, 'day'); day = day.add(1, 'day')) {
     const isoWeekday = ((day.day() + 6) % 7) + 1;
     for (const rule of rules) {
       if (rule.weekday !== isoWeekday) continue;
