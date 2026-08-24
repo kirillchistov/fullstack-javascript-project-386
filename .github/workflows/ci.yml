@@ -6,6 +6,16 @@ on:
   pull_request:
 
 jobs:
+  # Формат коммитов — Conventional Commits: по ним release-please
+  # формирует версию и changelog (см. AGENTS.md).
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: wagoid/commitlint-github-action@v6
+
   # Контракт — источник истины: проверяем, что openapi.yaml
   # соответствует TypeSpec-исходникам и не правился руками.
   contract:
