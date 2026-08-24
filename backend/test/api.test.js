@@ -61,6 +61,53 @@ test('слоты: некорректный период — 422 по контр�
   assert.equal(res.json().code, 'validation_error');
 });
 
+test('слоты: за горизонтом 14 дней слотов нет', async () => {
+  const app = buildApp();
+  // 20-й день от сегодня — за горизонтом, даже если это будний день
+  const day = dayjs.tz(dayjs(), TZ).add(20, 'day').format('YYYY-MM-DD');
+  const res = await app.inject({ method: 'GET', url: `/api/slots?from=${day}&to=${day}` });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), []);
+});
+
+test('слоты: широкий период обрезается горизонтом 14 дней', async () => {
+  const app = buildApp();
+  const from = dayjs.tz(dayjs(), TZ).format('YYYY-MM-DD');
+  const to = dayjs.tz(dayjs(), TZ).add(60, 'day').format('YYYY-MM-DD');
+  const res = await app.inject({ method: 'GET', url: `/api/slots?from=${from}&to=${to}` });
+  assert.equal(res.statusCode, 200);
+  const slots = res.json();
+  assert.ok(slots.length > 0);
+  const horizonEnd = dayjs.tz(dayjs(), TZ).startOf('day').add(14, 'day');
+  for (const slot of slots) {
+    assert.ok(
+      dayjs(slot.startsAt).isBefore(horizonEnd),
+      `слот ${slot.startsAt} за горизонтом ${horizonEnd.toISOString()}`,
+    );
+  }
+});
+
+test('бронирование: слот за горизонтом 14 дней — 409', async () => {
+  const app = buildApp();
+  // Будний день за горизонтом, время по расписанию (10:00 МСК)
+  let day = dayjs.tz(dayjs(), TZ).add(20, 'day');
+  while ([6, 0].includes(day.day())) {
+    day = day.add(1, 'day');
+  }
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/bookings',
+    payload: {
+      eventTypeId: 1,
+      startsAt: dayjs.tz(`${day.format('YYYY-MM-DD')}T10:00`, TZ).toISOString(),
+      guestName: 'Иван',
+      guestEmail: 'ivan@example.com',
+    },
+  });
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.json().code, 'slot_unavailable');
+});
+
 test('бронирование: успешное создание, повтор того же слота — 409', async () => {
   const app = buildApp();
   const day = nextWorkday();
@@ -202,6 +249,30 @@ test('владелец: неверный пароль — 401', async () => {
     payload: { email: 'owner@example.com', password: 'wrong' },
   });
   assert.equal(res.statusCode, 401);
+});
+
+test('ошибки: битый JSON — 400, а не 500', async () => {
+  const app = buildApp();
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/bookings',
+    headers: { 'content-type': 'application/json' },
+    payload: '{"oops": ',
+  });
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.json().code, 'bad_request');
+});
+
+test('ошибки: только внутренняя ошибка даёт 500 с internal_error', async () => {
+  const app = buildApp();
+  app.get('/api/boom', () => {
+    throw new Error('что-то сломалось');
+  });
+  const res = await app.inject({ method: 'GET', url: '/api/boom' });
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.json().code, 'internal_error');
+  // Текст внутренней ошибки не утекает наружу
+  assert.ok(!res.body.includes('что-то сломалось'));
 });
 
 test('доступность: чтение и обновление, пересечения — 422', async () => {
