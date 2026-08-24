@@ -1,11 +1,14 @@
 import { expect, test } from '@playwright/test';
 import {
   bookFirstFreeSlot,
+  dayButton,
   loginAsOwner,
   nextWorkday,
+  openMonth,
   selectDate,
   slotButtons,
   uniqueGuest,
+  workdayAfter,
 } from './helpers';
 
 /**
@@ -125,4 +128,75 @@ test('владелец видит бронь, отменяет её — слот
 test('кабинет владельца без входа редиректит на логин', async ({ page }) => {
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'Вход для владельца' })).toBeVisible();
+});
+
+/**
+ * Сценарий 6 (регресс): смена даты на шаге формы возвращает к выбору слота.
+ * Раньше правая карточка оставалась пустой (step === 'form' без selectedSlot),
+ * пользователь терял кнопку «Назад» и не мог продолжить без перезагрузки.
+ */
+test('смена даты на шаге формы возвращает к выбору слота', async ({ page }) => {
+  const date1 = nextWorkday();
+  const date2 = workdayAfter(date1);
+
+  await page.goto('/');
+  await selectDate(page, date1);
+  await slotButtons(page).first().click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await expect(page.getByText('Ваши данные')).toBeVisible();
+
+  // Меняем дату, не выходя из формы
+  await selectDate(page, date2, date1);
+
+  // Правая карточка не пустая: снова показан список слотов
+  await expect(page.getByText(/^Свободные слоты на /)).toBeVisible();
+  await expect(page.getByText('Ваши данные')).toHaveCount(0);
+  await expect(slotButtons(page).first()).toBeVisible();
+
+  // Путь можно пройти до конца без перезагрузки страницы
+  const guest = uniqueGuest('Регресс');
+  await slotButtons(page).first().click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByLabel('Имя').fill(guest.name);
+  await page.getByLabel('Email').fill(guest.email);
+  await page.getByRole('button', { name: 'Забронировать', exact: true }).click();
+  await expect(page.getByText('Встреча забронирована')).toBeVisible();
+});
+
+/**
+ * Сценарий 7 (регресс): смена типа события на шаге формы
+ * тоже возвращает к выбору слота, а не оставляет пустую карточку.
+ */
+test('смена типа события на шаге формы возвращает к выбору слота', async ({ page }) => {
+  await page.goto('/');
+  await selectDate(page, nextWorkday());
+  await slotButtons(page).first().click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await expect(page.getByText('Ваши данные')).toBeVisible();
+
+  await page.getByText('Консультация').click();
+
+  await expect(page.getByText(/^Свободные слоты на /)).toBeVisible();
+  await expect(page.getByText('Ваши данные')).toHaveCount(0);
+});
+
+/**
+ * Сценарий 8: горизонт бронирования — даты дальше 14 дней недоступны.
+ */
+test('даты дальше горизонта 14 дней недоступны в календаре', async ({ page }) => {
+  await page.goto('/');
+  await expect(slotButtons(page).first().or(page.getByText(/свободных слотов нет/))).toBeVisible();
+
+  const beyond = new Date();
+  beyond.setDate(beyond.getDate() + 14); // первый день за горизонтом (сегодня + 13 — последний доступный)
+
+  const sameMonth = beyond.getMonth() === new Date().getMonth();
+  if (!sameMonth) {
+    const nextButton = page.locator('button[data-direction="next"]');
+    if (await nextButton.isDisabled()) {
+      return; // навигация к следующему месяцу закрыта — даты за горизонтом недостижимы
+    }
+    await openMonth(page, beyond);
+  }
+  await expect(dayButton(page, beyond)).toBeDisabled();
 });

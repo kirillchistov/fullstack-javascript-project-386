@@ -33,15 +33,36 @@ export function dayAriaLabel(date: Date): string {
   return `${date.getDate()} ${RU_MONTHS_GENITIVE[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-/** Выбрать дату в календаре: перелистнуть месяц при необходимости и кликнуть день */
-export async function selectDate(page: Page, date: Date): Promise<void> {
-  const today = new Date();
+/** Ближайший будний день после указанной даты */
+export function workdayAfter(date: Date): Date {
+  const next = new Date(date);
+  do {
+    next.setDate(next.getDate() + 1);
+  } while (next.getDay() === 0 || next.getDay() === 6);
+  return next;
+}
+
+/**
+ * Перелистнуть календарь к месяцу даты.
+ * `from` — месяц, который календарь показывает сейчас (по умолчанию текущий).
+ */
+export async function openMonth(page: Page, date: Date, from: Date = new Date()): Promise<void> {
   const monthsAhead =
-    (date.getFullYear() - today.getFullYear()) * 12 + (date.getMonth() - today.getMonth());
-  for (let i = 0; i < monthsAhead; i += 1) {
-    await page.locator('button[data-direction="next"]').click();
+    (date.getFullYear() - from.getFullYear()) * 12 + (date.getMonth() - from.getMonth());
+  const direction = monthsAhead > 0 ? 'next' : 'previous';
+  for (let i = 0; i < Math.abs(monthsAhead); i += 1) {
+    await page.locator(`button[data-direction="${direction}"]`).click();
   }
-  await page.getByLabel(dayAriaLabel(date)).click();
+}
+
+/** Кнопка дня в календаре. exact — иначе «7 сентября» совпадёт и с «17 сентября» */
+export const dayButton = (page: Page, date: Date) =>
+  page.getByLabel(dayAriaLabel(date), { exact: true });
+
+/** Выбрать дату в календаре: перелистнуть месяц при необходимости и кликнуть день */
+export async function selectDate(page: Page, date: Date, from: Date = new Date()): Promise<void> {
+  await openMonth(page, date, from);
+  await dayButton(page, date).click();
 }
 
 export const slotButtons = (page: Page) =>

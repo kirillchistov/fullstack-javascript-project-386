@@ -164,7 +164,10 @@ export default function BookingPage() {
                       p="sm"
                       style={{ cursor: 'pointer' }}
                       bg={selectedType?.id === et.id ? 'blue.0' : undefined}
-                      onClick={() => setSelectedType(et)}
+                      onClick={() => {
+                        setSelectedType(et);
+                        setStep('pick'); // смена типа возвращает к выбору слота
+                      }}
                     >
                       <Group justify="space-between">
                         <div>
@@ -189,9 +192,12 @@ export default function BookingPage() {
               </Text>
               <DatePicker
                 value={date}
-                onChange={setDate}
+                onChange={(value) => {
+                  setDate(value);
+                  setStep('pick'); // смена даты возвращает к выбору слота
+                }}
                 minDate={today}
-                maxDate={dayjs().add(60, 'day').format('YYYY-MM-DD')}
+                maxDate={dayjs().add(13, 'day').format('YYYY-MM-DD')}
               />
             </Card>
           </Stack>
