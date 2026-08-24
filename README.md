@@ -103,7 +103,9 @@ docker run --rm -e PORT=8080 -p 8080:8080 call-calendar
 
 ## Коммиты и релизы
 
-Коммиты — по [Conventional Commits](https://www.conventionalcommits.org/ru/v1.0.0/) (`feat:`, `fix:`, `docs:` …); соглашение, включая правила для ИИ-агентов, зафиксировано в [AGENTS.md](./AGENTS.md). По этим коммитам [release-please](https://github.com/googleapis/release-please) ([workflow](./.github/workflows/release-please.yml)) автоматически поддерживает release-PR с changelog и semver-версией; мёрдж release-PR создаёт GitHub Release и тег.
+Коммиты — по [Conventional Commits](https://www.conventionalcommits.org/ru/v1.0.0/) (`feat:`, `fix:`, `docs:` …); соглашение, включая правила для ИИ-агентов, зафиксировано в [AGENTS.md](./AGENTS.md). Формат проверяется в CI (job `commitlint`, конфиг — [.commitlintrc.json](./.commitlintrc.json)). По этим коммитам [release-please](https://github.com/googleapis/release-please) ([workflow](./.github/workflows/release-please.yml)) автоматически поддерживает release-PR с changelog и semver-версией; мёрдж release-PR создаёт GitHub Release и тег.
+
+Историю до внедрения соглашения не переписываем: release-please учитывает только коммиты после последнего релиза, поэтому первый release-PR появится после первого `fix:`/`feat:`-коммита. При необходимости стартовую версию можно задать явно футером `Release-As: 0.1.0` в любом коммите.
 
 ## Сборка фронтенда
 
