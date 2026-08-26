@@ -6,6 +6,7 @@ const host = process.env.HOST ?? '0.0.0.0';
 
 const app = buildApp({
   logger: { transport: undefined, level: 'info' },
+  databasePath: process.env.DATABASE_PATH,
 });
 
 try {

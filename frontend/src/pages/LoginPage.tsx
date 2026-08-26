@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Button, Card, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { isDemo } from '../api/client';
 import { useAuth } from '../auth';
 
@@ -58,6 +58,12 @@ export default function LoginPage() {
           <Button type="submit" loading={submitting} disabled={!email || !password}>
             Войти
           </Button>
+          <Text size="sm" c="dimmed" ta="center">
+            Нет аккаунта?{' '}
+            <Text span component={Link} to="/register" c="blue">
+              Зарегистрироваться
+            </Text>
+          </Text>
         </Stack>
       </Card>
     </Stack>

@@ -15,7 +15,7 @@ export interface paths {
         get: operations["AvailabilityRoutes_getAvailability"];
         /**
          * @description Полная замена настроек доступности.
-         *     Интервалы каждого правила должны быть кратны 30 минутам и не пересекаться в рамках дня.
+         *     Интервалы каждого правила должны быть кратны 15 минутам и не пересекаться в рамках дня.
          */
         put: operations["AvailabilityRoutes_updateAvailability"];
         post?: never;
@@ -33,14 +33,9 @@ export interface paths {
             cookie?: never;
         };
         /** @description Владелец смотрит список предстоящих встреч (только активные, от текущего момента) */
-        get: operations["BookingRoutes_list"];
+        get: operations["OwnerBookingRoutes_list"];
         put?: never;
-        /**
-         * @description Гость создаёт бронирование на свободный слот.
-         *     409 — слот уже занят, находится в прошлом, вне расписания
-         *     или дальше горизонта бронирования (14 дней).
-         */
-        post: operations["BookingRoutes_create"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -58,7 +53,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** @description Владелец отменяет встречу (перевод в статус cancelled, слот снова свободен) */
-        delete: operations["BookingRoutes_cancel"];
+        delete: operations["OwnerBookingRoutes_cancel"];
         options?: never;
         head?: never;
         patch?: never;
@@ -71,8 +66,124 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Список типов событий, на которые можно записаться */
-        get: operations["EventTypeRoutes_list"];
+        /** @description Список своих типов событий */
+        get: operations["OwnerEventTypeRoutes_list"];
+        put?: never;
+        /** @description Создать тип события */
+        post: operations["OwnerEventTypeRoutes_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/event-types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Обновить тип события */
+        put: operations["OwnerEventTypeRoutes_update"];
+        post?: never;
+        /** @description Удалить тип события (если нет активных будущих броней) */
+        delete: operations["OwnerEventTypeRoutes_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Регистрация нового владельца календаря.
+         *     При успехе устанавливается сессионная cookie (как при входе).
+         *     409 — email или slug уже заняты.
+         */
+        post: operations["OwnerRoutes_register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Публичный профиль владельца для страницы /u/{slug} */
+        get: operations["PublicRoutes_getOwner"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{slug}/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Гость создаёт бронирование на свободный слот владельца.
+         *     409 — слот занят (пересечение с другой бронью), в прошлом, вне расписания
+         *     или дальше горизонта бронирования (14 дней).
+         */
+        post: operations["PublicRoutes_createBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{slug}/event-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Типы событий этого владельца */
+        get: operations["PublicRoutes_listEventTypes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{slug}/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Свободные слоты за период [from, to] для выбранного типа события.
+         *     Длина слота = durationMinutes типа. Горизонт — 14 дней включая сегодня.
+         *     Даты from/to интерпретируются в таймзоне владельца.
+         */
+        get: operations["PublicRoutes_listSlots"];
         put?: never;
         post?: never;
         delete?: never;
@@ -100,33 +211,16 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/slots": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * @description Свободные слоты за период [from, to] включительно.
-         *     Слоты вычисляются из правил доступности за вычетом активных бронирований;
-         *     слоты в прошлом не возвращаются.
-         *     Горизонт бронирования — 14 дней, включая сегодняшний: слоты позже
-         *     этого срока не возвращаются, даже если запрошен более широкий период.
-         */
-        get: operations["SlotRoutes_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description 409 — email или slug уже заняты при регистрации */
+        AlreadyExistsError: {
+            /** @enum {string} */
+            code: "already_exists";
+            message: string;
+        };
         /**
          * @description Настройки доступности владельца: часовой пояс + набор недельных правил
          * @example {
@@ -203,7 +297,7 @@ export interface components {
             eventTypeId: number;
             /**
              * Format: date-time
-             * @description Начало выбранного слота, UTC. Должно совпадать со слотом из GET /api/slots.
+             * @description Начало выбранного слота, UTC. Должно совпадать со слотом из GET …/slots.
              */
             startsAt: string;
             guestName: string;
@@ -235,9 +329,16 @@ export interface components {
             description?: string;
             /**
              * Format: int32
-             * @description Длительность встречи в минутах. В MVP всегда 30.
-             * @default 30
+             * @description Длительность встречи в минутах: 15–240, кратно 15.
+             *     От неё зависят длина слота и шаг сетки при вычислении свободного времени.
              */
+            durationMinutes: number;
+        };
+        /** @description Создание / обновление типа события владельцем */
+        EventTypeWrite: {
+            name: string;
+            description?: string;
+            /** Format: int32 */
             durationMinutes: number;
         };
         /** @description Ошибка одного поля при валидации */
@@ -252,11 +353,13 @@ export interface components {
             message: string;
         };
         /**
-         * @description Владелец календаря. В MVP владелец один, создаётся при инициализации приложения.
+         * @description Владелец календаря. Создаётся через регистрацию; публичная страница —
+         *     /u/{slug} на фронтенде и /api/public/{slug} в API.
          * @example {
          *       "id": 1,
          *       "name": "Кирилл Чистов",
-         *       "email": "owner@example.com"
+         *       "email": "owner@example.com",
+         *       "slug": "kirill"
          *     }
          */
         Owner: {
@@ -266,6 +369,36 @@ export interface components {
             name: string;
             /** Format: email */
             email: string;
+            /**
+             * @description Публичный идентификатор в URL: латиница, цифры, дефис;
+             *     2–32 символа, начинается и заканчивается буквой или цифрой.
+             */
+            slug: string;
+        };
+        /** @description Данные регистрации нового владельца */
+        OwnerCreate: {
+            name: string;
+            /** Format: email */
+            email: string;
+            password: string;
+            slug: string;
+        };
+        /**
+         * @description Публичный профиль владельца для гостевой страницы бронирования
+         * @example {
+         *       "id": 1,
+         *       "name": "Кирилл Чистов",
+         *       "slug": "kirill",
+         *       "timezone": "Europe/Moscow"
+         *     }
+         */
+        OwnerPublic: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            slug: string;
+            /** @description IANA-таймзона владельца (в ней заданы правила доступности) */
+            timezone: string;
         };
         /** @description Активная сессия */
         Session: {
@@ -278,8 +411,8 @@ export interface components {
             password: string;
         };
         /**
-         * @description Свободный 30-минутный слот. Вычисляется на лету из правил доступности
-         *     за вычетом активных бронирований — в базе не хранится.
+         * @description Свободный слот. Вычисляется на лету из правил доступности и длительности
+         *     выбранного типа события за вычетом активных бронирований — в базе не хранится.
          * @example {
          *       "startsAt": "2026-07-27T10:00:00Z",
          *       "endsAt": "2026-07-27T10:30:00Z"
@@ -293,7 +426,7 @@ export interface components {
             startsAt: string;
             /**
              * Format: date-time
-             * @description Конец слота, UTC (startsAt + 30 минут)
+             * @description Конец слота, UTC (startsAt + durationMinutes типа события)
              */
             endsAt: string;
         };
@@ -390,7 +523,7 @@ export interface operations {
             };
         };
     };
-    BookingRoutes_list: {
+    OwnerBookingRoutes_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -419,49 +552,7 @@ export interface operations {
             };
         };
     };
-    BookingRoutes_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BookingCreate"];
-            };
-        };
-        responses: {
-            /** @description The request has succeeded and a new resource has been created as a result. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Booking"];
-                };
-            };
-            /** @description 409 — конфликт: слот уже занят или находится в прошлом */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConflictError"];
-                };
-            };
-            /** @description 422 — ошибка валидации входных данных */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationError"];
-                };
-            };
-        };
-    };
-    BookingRoutes_cancel: {
+    OwnerBookingRoutes_cancel: {
         parameters: {
             query?: never;
             header?: never;
@@ -499,7 +590,7 @@ export interface operations {
             };
         };
     };
-    EventTypeRoutes_list: {
+    OwnerEventTypeRoutes_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -515,6 +606,361 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventType"][];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+        };
+    };
+    OwnerEventTypeRoutes_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventTypeWrite"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventType"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OwnerEventTypeRoutes_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventTypeWrite"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventType"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OwnerEventTypeRoutes_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description There is no content to send for this request, but the headers may be useful. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OwnerRoutes_register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerCreate"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description 409 — email или slug уже заняты при регистрации */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlreadyExistsError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    PublicRoutes_getOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerPublic"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    PublicRoutes_createBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingCreate"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 409 — конфликт: слот уже занят или находится в прошлом */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    PublicRoutes_listEventTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventType"][];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    PublicRoutes_listSlots: {
+        parameters: {
+            query: {
+                /** @description Тип события: определяет длительность слота */
+                eventTypeId: number;
+                /** @description Начало периода, YYYY-MM-DD */
+                from: string;
+                /** @description Конец периода, YYYY-MM-DD */
+                to: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Slot"][];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
                 };
             };
         };
@@ -605,40 +1051,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    SlotRoutes_list: {
-        parameters: {
-            query: {
-                /** @description Начало периода, YYYY-MM-DD */
-                from: string;
-                /** @description Конец периода, YYYY-MM-DD */
-                to: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The request has succeeded. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Slot"][];
-                };
-            };
-            /** @description 422 — ошибка валидации входных данных */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationError"];
-                };
             };
         };
     };

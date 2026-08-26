@@ -9,6 +9,25 @@ namespace CallCalendar;
 alias OwnerSession = ApiKeyAuth<ApiKeyLocation.cookie, "session">;
 
 // ---------------------------------------------------------------------------
+// Регистрация владельца
+// ---------------------------------------------------------------------------
+
+@tag("Owners")
+@route("/api/owners")
+namespace OwnerRoutes {
+  /**
+   * Регистрация нового владельца календаря.
+   * При успехе устанавливается сессионная cookie (как при входе).
+   * 409 — email или slug уже заняты.
+   */
+  @post
+  op register(@body body: OwnerCreate): {
+    @statusCode statusCode: 201;
+    @body session: Session;
+  } | AlreadyExistsError | ValidationError;
+}
+
+// ---------------------------------------------------------------------------
 // Сессия владельца
 // ---------------------------------------------------------------------------
 
@@ -47,65 +66,101 @@ namespace SessionRoutes {
 }
 
 // ---------------------------------------------------------------------------
-// Публичные эндпоинты гостя
+// Публичные эндпоинты гостя (по slug владельца)
 // ---------------------------------------------------------------------------
 
 @tag("Guest")
-@route("/api/event-types")
-namespace EventTypeRoutes {
-  /** Список типов событий, на которые можно записаться */
+@route("/api/public/{slug}")
+namespace PublicRoutes {
+  /** Публичный профиль владельца для страницы /u/{slug} */
   @get
-  op list(): EventType[];
-}
+  op getOwner(@path slug: string): OwnerPublic | NotFoundError;
 
-@tag("Guest")
-@route("/api/slots")
-namespace SlotRoutes {
+  /** Типы событий этого владельца */
+  @get
+  @route("/event-types")
+  op listEventTypes(@path slug: string): EventType[] | NotFoundError;
+
   /**
-   * Свободные слоты за период [from, to] включительно.
-   * Слоты вычисляются из правил доступности за вычетом активных бронирований;
-   * слоты в прошлом не возвращаются.
-   * Горизонт бронирования — 14 дней, включая сегодняшний: слоты позже
-   * этого срока не возвращаются, даже если запрошен более широкий период.
+   * Свободные слоты за период [from, to] для выбранного типа события.
+   * Длина слота = durationMinutes типа. Горизонт — 14 дней включая сегодня.
+   * Даты from/to интерпретируются в таймзоне владельца.
    */
   @get
-  op list(
+  @route("/slots")
+  op listSlots(
+    @path slug: string,
+
+    /** Тип события: определяет длительность слота */
+    @query eventTypeId: int32,
+
     /** Начало периода, YYYY-MM-DD */
     @query from: plainDate,
 
     /** Конец периода, YYYY-MM-DD */
     @query to: plainDate,
-  ): Slot[] | ValidationError;
+  ): Slot[] | NotFoundError | ValidationError;
+
+  /**
+   * Гость создаёт бронирование на свободный слот владельца.
+   * 409 — слот занят (пересечение с другой бронью), в прошлом, вне расписания
+   * или дальше горизонта бронирования (14 дней).
+   */
+  @post
+  @route("/bookings")
+  op createBooking(@path slug: string, @body booking: BookingCreate): {
+    @statusCode statusCode: 201;
+    @body booking: Booking;
+  } | NotFoundError | ConflictError | ValidationError;
 }
 
 // ---------------------------------------------------------------------------
-// Бронирования
+// Типы событий владельца (CRUD)
 // ---------------------------------------------------------------------------
 
-@route("/api/bookings")
-namespace BookingRoutes {
-  /**
-   * Гость создаёт бронирование на свободный слот.
-   * 409 — слот уже занят, находится в прошлом, вне расписания
-   * или дальше горизонта бронирования (14 дней).
-   */
-  @tag("Guest")
-  @post
-  op create(@body booking: BookingCreate): {
-    @statusCode statusCode: 201;
-    @body booking: Booking;
-  } | ConflictError | ValidationError;
+@tag("Owner")
+@route("/api/event-types")
+@useAuth(OwnerSession)
+namespace OwnerEventTypeRoutes {
+  /** Список своих типов событий */
+  @get
+  op list(): EventType[] | UnauthorizedError;
 
+  /** Создать тип события */
+  @post
+  op create(@body body: EventTypeWrite): {
+    @statusCode statusCode: 201;
+    @body eventType: EventType;
+  } | UnauthorizedError | ValidationError;
+
+  /** Обновить тип события */
+  @put
+  @route("/{id}")
+  op update(@path id: int32, @body body: EventTypeWrite): EventType | UnauthorizedError | NotFoundError | ValidationError;
+
+  /** Удалить тип события (если нет активных будущих броней) */
+  @delete
+  @route("/{id}")
+  op remove(@path id: int32): {
+    @statusCode statusCode: 204;
+  } | UnauthorizedError | NotFoundError | ValidationError;
+}
+
+// ---------------------------------------------------------------------------
+// Бронирования владельца
+// ---------------------------------------------------------------------------
+
+@tag("Owner")
+@route("/api/bookings")
+@useAuth(OwnerSession)
+namespace OwnerBookingRoutes {
   /** Владелец смотрит список предстоящих встреч (только активные, от текущего момента) */
-  @tag("Owner")
-  @useAuth(OwnerSession)
   @get
   op list(): Booking[] | UnauthorizedError;
 
   /** Владелец отменяет встречу (перевод в статус cancelled, слот снова свободен) */
-  @tag("Owner")
-  @useAuth(OwnerSession)
   @delete
+  @route("/{id}")
   op cancel(@path id: int32): {
     @statusCode statusCode: 204;
   } | UnauthorizedError | NotFoundError;
@@ -125,7 +180,7 @@ namespace AvailabilityRoutes {
 
   /**
    * Полная замена настроек доступности.
-   * Интервалы каждого правила должны быть кратны 30 минутам и не пересекаться в рамках дня.
+   * Интервалы каждого правила должны быть кратны 15 минутам и не пересекаться в рамках дня.
    */
   @put
   op updateAvailability(@body availability: Availability): Availability | UnauthorizedError | ValidationError;

@@ -8,8 +8,16 @@ namespace CallCalendar;
 // Доменные сущности
 // ---------------------------------------------------------------------------
 
-/** Владелец календаря. В MVP владелец один, создаётся при инициализации приложения. */
-@example(#{ id: 1, name: "Кирилл Чистов", email: "owner@example.com" })
+/**
+ * Владелец календаря. Создаётся через регистрацию; публичная страница —
+ * /u/{slug} на фронтенде и /api/public/{slug} в API.
+ */
+@example(#{
+  id: 1,
+  name: "Кирилл Чистов",
+  email: "owner@example.com",
+  slug: "kirill",
+})
 model Owner {
   id: int32;
 
@@ -18,6 +26,44 @@ model Owner {
 
   @format("email")
   email: string;
+
+  /**
+   * Публичный идентификатор в URL: латиница, цифры, дефис;
+   * 2–32 символа, начинается и заканчивается буквой или цифрой.
+   */
+  @pattern("^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
+  slug: string;
+}
+
+/** Публичный профиль владельца для гостевой страницы бронирования */
+@example(#{
+  id: 1,
+  name: "Кирилл Чистов",
+  slug: "kirill",
+  timezone: "Europe/Moscow",
+})
+model OwnerPublic {
+  id: int32;
+  name: string;
+  slug: string;
+
+  /** IANA-таймзона владельца (в ней заданы правила доступности) */
+  timezone: string;
+}
+
+/** Данные регистрации нового владельца */
+model OwnerCreate {
+  @minLength(1)
+  name: string;
+
+  @format("email")
+  email: string;
+
+  @minLength(6)
+  password: string;
+
+  @pattern("^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
+  slug: string;
 }
 
 /** Тип события — то, на что гость записывается (например, «Вводный звонок») */
@@ -34,8 +80,25 @@ model EventType {
 
   description?: string;
 
-  /** Длительность встречи в минутах. В MVP всегда 30. */
-  durationMinutes: int32 = 30;
+  /**
+   * Длительность встречи в минутах: 15–240, кратно 15.
+   * От неё зависят длина слота и шаг сетки при вычислении свободного времени.
+   */
+  @minValue(15)
+  @maxValue(240)
+  durationMinutes: int32;
+}
+
+/** Создание / обновление типа события владельцем */
+model EventTypeWrite {
+  @minLength(1)
+  name: string;
+
+  description?: string;
+
+  @minValue(15)
+  @maxValue(240)
+  durationMinutes: int32;
 }
 
 /**
@@ -73,8 +136,8 @@ model Availability {
 }
 
 /**
- * Свободный 30-минутный слот. Вычисляется на лету из правил доступности
- * за вычетом активных бронирований — в базе не хранится.
+ * Свободный слот. Вычисляется на лету из правил доступности и длительности
+ * выбранного типа события за вычетом активных бронирований — в базе не хранится.
  */
 @example(#{
   startsAt: utcDateTime.fromISO("2026-07-27T10:00:00Z"),
@@ -84,7 +147,7 @@ model Slot {
   /** Начало слота, UTC */
   startsAt: utcDateTime;
 
-  /** Конец слота, UTC (startsAt + 30 минут) */
+  /** Конец слота, UTC (startsAt + durationMinutes типа события) */
   endsAt: utcDateTime;
 }
 
@@ -131,7 +194,7 @@ model Booking {
 model BookingCreate {
   eventTypeId: int32;
 
-  /** Начало выбранного слота, UTC. Должно совпадать со слотом из GET /api/slots. */
+  /** Начало выбранного слота, UTC. Должно совпадать со слотом из GET …/slots. */
   startsAt: utcDateTime;
 
   @minLength(1)
@@ -174,6 +237,14 @@ model NotFoundError {
 model ConflictError {
   @statusCode statusCode: 409;
   code: "slot_unavailable";
+  message: string;
+}
+
+/** 409 — email или slug уже заняты при регистрации */
+@error
+model AlreadyExistsError {
+  @statusCode statusCode: 409;
+  code: "already_exists";
   message: string;
 }
 

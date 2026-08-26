@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, type Owner } from './api/client';
 
 type AuthState = {
@@ -6,6 +6,8 @@ type AuthState = {
   loading: boolean;
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
+  /** Перечитать сессию (после регистрации) */
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -13,6 +15,11 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [owner, setOwner] = useState<Owner | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    const { data } = await api.GET('/api/session');
+    setOwner(data?.owner ?? null);
+  }, []);
 
   useEffect(() => {
     api
@@ -37,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ owner, loading, login, logout }}>
+    <AuthContext.Provider value={{ owner, loading, login, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

@@ -5,21 +5,42 @@ import timezone from 'dayjs/plugin/timezone.js';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-export const SLOT_MINUTES = 30;
+/** Базовая кратность интервалов доступности и длительности типов событий */
+export const GRID_MINUTES = 15;
 
 /** Горизонт бронирования: слоты доступны на 14 дней вперёд, включая сегодняшний */
 export const BOOKING_HORIZON_DAYS = 14;
 
+/** @deprecated используйте GRID_MINUTES; оставлено для совместимости импортов */
+export const SLOT_MINUTES = GRID_MINUTES;
+
+function overlaps(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd;
+}
+
 /**
- * Свободные 30-минутные слоты за период [from, to] (даты в таймзоне владельца).
- * Правила доступности разворачиваются в слоты, из них вычитаются
- * активные бронирования и прошедшее время. Период автоматически обрезается
- * горизонтом бронирования: [сегодня, сегодня + 13 дней] в таймзоне владельца.
- * Возвращает UTC ISO-интервалы.
+ * Свободные слоты длительностью durationMinutes за период [from, to]
+ * (даты в таймзоне владельца). Шаг сетки = durationMinutes.
+ * Из кандидатов вычитаются интервалы, пересекающиеся с активными бронями.
+ * Период обрезается горизонтом: [сегодня, сегодня + 13 дней] в TZ владельца.
  */
-export function computeFreeSlots({ availability, activeBookings, from, to, now = dayjs() }) {
+export function computeFreeSlots({
+  availability,
+  activeBookings,
+  from,
+  to,
+  durationMinutes,
+  now = dayjs(),
+}) {
+  if (!Number.isInteger(durationMinutes) || durationMinutes < GRID_MINUTES) {
+    return [];
+  }
+
   const { timezone: tz, rules } = availability;
-  const bookedStarts = new Set(activeBookings.map((b) => Date.parse(b.startsAt)));
+  const booked = activeBookings.map((b) => ({
+    start: Date.parse(b.startsAt),
+    end: Date.parse(b.endsAt),
+  }));
   const slots = [];
 
   const todayInTz = dayjs.tz(now.toISOString(), tz).startOf('day');
@@ -37,14 +58,17 @@ export function computeFreeSlots({ availability, activeBookings, from, to, now =
       const dayStr = day.format('YYYY-MM-DD');
       let cursor = dayjs.tz(`${dayStr}T${rule.startTime}`, tz);
       const end = dayjs.tz(`${dayStr}T${rule.endTime}`, tz);
-      while (cursor.add(SLOT_MINUTES, 'minute').valueOf() <= end.valueOf()) {
-        if (cursor.isAfter(now) && !bookedStarts.has(cursor.valueOf())) {
+      while (cursor.add(durationMinutes, 'minute').valueOf() <= end.valueOf()) {
+        const slotStart = cursor.valueOf();
+        const slotEnd = cursor.add(durationMinutes, 'minute').valueOf();
+        const conflict = booked.some((b) => overlaps(slotStart, slotEnd, b.start, b.end));
+        if (cursor.isAfter(now) && !conflict) {
           slots.push({
             startsAt: cursor.toISOString(),
-            endsAt: cursor.add(SLOT_MINUTES, 'minute').toISOString(),
+            endsAt: cursor.add(durationMinutes, 'minute').toISOString(),
           });
         }
-        cursor = cursor.add(SLOT_MINUTES, 'minute');
+        cursor = cursor.add(durationMinutes, 'minute');
       }
     }
   }
@@ -52,8 +76,14 @@ export function computeFreeSlots({ availability, activeBookings, from, to, now =
   return slots.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
 
-/** Проверка, что момент startsAt — свободный слот (для бронирования) */
-export function isFreeSlot({ availability, activeBookings, startsAt, now = dayjs() }) {
+/** Проверка, что startsAt — свободный слот заданной длительности */
+export function isFreeSlot({
+  availability,
+  activeBookings,
+  startsAt,
+  durationMinutes,
+  now = dayjs(),
+}) {
   const start = dayjs(startsAt);
   if (!start.isValid() || !start.isAfter(now)) return false;
 
@@ -63,9 +93,23 @@ export function isFreeSlot({ availability, activeBookings, startsAt, now = dayjs
     activeBookings,
     from: dayInOwnerTz,
     to: dayInOwnerTz,
+    durationMinutes,
     now,
   });
   return slots.some((s) => Date.parse(s.startsAt) === start.valueOf());
+}
+
+export function validateDurationMinutes(durationMinutes) {
+  if (!Number.isInteger(durationMinutes)) {
+    return 'Длительность должна быть целым числом минут';
+  }
+  if (durationMinutes < 15 || durationMinutes > 240) {
+    return 'Длительность должна быть от 15 до 240 минут';
+  }
+  if (durationMinutes % GRID_MINUTES !== 0) {
+    return `Длительность должна быть кратна ${GRID_MINUTES} минутам`;
+  }
+  return null;
 }
 
 /**
@@ -92,12 +136,14 @@ export function validateAvailability({ timezone: tz, rules }) {
     if (end <= start) {
       errors.push({ field: `rules[${i}]`, message: 'Конец интервала должен быть позже начала' });
     }
-    if ((end - start) % SLOT_MINUTES !== 0) {
-      errors.push({ field: `rules[${i}]`, message: 'Интервал должен быть кратен 30 минутам' });
+    if ((end - start) % GRID_MINUTES !== 0) {
+      errors.push({
+        field: `rules[${i}]`,
+        message: `Интервал должен быть кратен ${GRID_MINUTES} минутам`,
+      });
     }
   });
 
-  // Пересечения интервалов в рамках одного дня недели
   for (let i = 0; i < rules.length; i += 1) {
     for (let j = i + 1; j < rules.length; j += 1) {
       if (rules[i].weekday !== rules[j].weekday) continue;

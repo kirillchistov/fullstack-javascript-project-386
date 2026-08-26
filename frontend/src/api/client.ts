@@ -14,6 +14,7 @@ export const api = createClient<paths>({
 });
 
 export type Owner = components['schemas']['Owner'];
+export type OwnerPublic = components['schemas']['OwnerPublic'];
 export type EventType = components['schemas']['EventType'];
 export type Availability = components['schemas']['Availability'];
 export type AvailabilityRule = components['schemas']['AvailabilityRule'];

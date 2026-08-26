@@ -77,7 +77,7 @@ export async function bookFirstFreeSlot(
   guest: { name: string; email: string; comment?: string },
   date: Date,
 ): Promise<string> {
-  await page.goto('/');
+  await page.goto('/u/kirill');
   await selectDate(page, date);
 
   const slot = slotButtons(page).first();

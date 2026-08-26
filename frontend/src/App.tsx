@@ -3,9 +3,12 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-r
 import { isDemo } from './api/client';
 import { useAuth } from './auth';
 import BookingPage from './pages/BookingPage';
+import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import OwnerBookingsPage from './pages/OwnerBookingsPage';
 import AvailabilityPage from './pages/AvailabilityPage';
+import EventTypesPage from './pages/EventTypesPage';
 import type { ReactNode } from 'react';
 
 function RequireOwner({ children }: { children: ReactNode }) {
@@ -51,13 +54,21 @@ export default function App() {
                   Запись на звонок
                 </Text>
               </Title>
-              <Button component={Link} to="/" variant="subtle" size="compact-sm">
-                Бронирование
-              </Button>
               {owner && (
                 <>
+                  <Button component={Link} to={`/u/${owner.slug}`} variant="subtle" size="compact-sm">
+                    Моя страница
+                  </Button>
                   <Button component={Link} to="/admin" variant="subtle" size="compact-sm">
                     Встречи
+                  </Button>
+                  <Button
+                    component={Link}
+                    to="/admin/event-types"
+                    variant="subtle"
+                    size="compact-sm"
+                  >
+                    Типы встреч
                   </Button>
                   <Button
                     component={Link}
@@ -81,9 +92,14 @@ export default function App() {
                   </Button>
                 </>
               ) : (
-                <Button component={Link} to="/login" variant="default" size="compact-sm">
-                  Я владелец
-                </Button>
+                <>
+                  <Button component={Link} to="/register" variant="subtle" size="compact-sm">
+                    Регистрация
+                  </Button>
+                  <Button component={Link} to="/login" variant="default" size="compact-sm">
+                    Войти
+                  </Button>
+                </>
               )}
             </Group>
           </Group>
@@ -95,17 +111,28 @@ export default function App() {
           {isDemo && (
             <Alert color="yellow" mb="md">
               Демо-версия: сервер эмулируется в браузере, данные сохраняются только в
-              вашем localStorage. Для входа владельца подойдут любые email и пароль.
+              вашем localStorage. Для входа владельца подойдут любые email и пароль
+              (slug демо — kirill).
             </Alert>
           )}
           <Routes>
-            <Route path="/" element={<BookingPage />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/u/:slug" element={<BookingPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route
               path="/admin"
               element={
                 <RequireOwner>
                   <OwnerBookingsPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="/admin/event-types"
+              element={
+                <RequireOwner>
+                  <EventTypesPage />
                 </RequireOwner>
               }
             />

@@ -23,6 +23,7 @@ COPY backend/src backend/src
 COPY --from=frontend /build/frontend/dist public
 
 ENV STATIC_DIR=/app/public
+ENV DATABASE_PATH=/app/data/call-calendar.sqlite
 EXPOSE 5001
 
 CMD ["node", "backend/src/index.js"]

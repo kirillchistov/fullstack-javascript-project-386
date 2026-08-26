@@ -49,7 +49,7 @@ test('успешный вход ведёт в кабинет владельца'
   await page.route('**/api/session', (route) => {
     if (route.request().method() === 'POST') {
       return route.fulfill({
-        json: { owner: { id: 1, name: 'Кирилл Чистов', email: 'owner@example.com' } },
+        json: { owner: { id: 1, name: 'Кирилл Чистов', email: 'owner@example.com', slug: 'kirill' } },
       });
     }
     return route.fallback();

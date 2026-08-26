@@ -6,17 +6,21 @@ import fastifyStatic from '@fastify/static';
 import addFormats from 'ajv-formats';
 import dayjs from 'dayjs';
 import { componentSchemas, ref } from './contract.js';
+import { openDatabase } from './db.js';
 import { createStore } from './store.js';
 import {
-  SLOT_MINUTES,
   computeFreeSlots,
   isFreeSlot,
   validateAvailability,
+  validateDurationMinutes,
 } from './slots.js';
 
 const SESSION_COOKIE = 'session';
 
-export function buildApp({ logger = false } = {}) {
+/**
+ * @param {{ logger?: boolean | object, databasePath?: string }} [options]
+ */
+export function buildApp({ logger = false, databasePath } = {}) {
   const app = Fastify({
     logger,
     ajv: {
@@ -26,8 +30,6 @@ export function buildApp({ logger = false } = {}) {
 
   app.register(cookie);
 
-  // В продакшене (Docker) Fastify раздаёт собранный фронтенд:
-  // статика + SPA-fallback на index.html для всех не-API путей.
   const staticDir = process.env.STATIC_DIR;
   if (staticDir && fs.existsSync(staticDir)) {
     app.register(fastifyStatic, { root: path.resolve(staticDir) });
@@ -39,30 +41,38 @@ export function buildApp({ logger = false } = {}) {
     });
   }
 
-  const store = createStore();
+  const db = openDatabase(databasePath ?? process.env.DATABASE_PATH);
+  const store = createStore(db);
   app.decorate('store', store);
+  app.addHook('onClose', async () => {
+    store.close();
+  });
 
   for (const schema of componentSchemas()) {
     app.addSchema(schema);
   }
 
   const unauthorized = (reply) =>
-    reply
-      .code(401)
-      .send({ code: 'unauthorized', message: 'Требуется вход владельца' });
+    reply.code(401).send({ code: 'unauthorized', message: 'Требуется вход владельца' });
 
-  /** preHandler для эндпоинтов владельца (apiKey-in-cookie `session` по контракту) */
   const requireOwner = (request, reply, done) => {
-    if (!store.hasSession(request.cookies[SESSION_COOKIE])) {
+    const owner = store.getSessionOwner(request.cookies[SESSION_COOKIE]);
+    if (!owner) {
       unauthorized(reply);
       return;
     }
+    request.owner = owner;
     done();
   };
 
-  // Ошибки в формате контракта. Статус не теряется: ошибки Fastify со своим
-  // statusCode (битый JSON — 400, неверный content-type — 415 и т. п.)
-  // возвращаются как есть; 500 — только для настоящих внутренних ошибок.
+  const setSessionCookie = (reply, token) => {
+    reply.setCookie(SESSION_COOKIE, token, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+    });
+  };
+
   app.setErrorHandler((error, request, reply) => {
     if (error.validation) {
       reply.code(422).send({
@@ -91,29 +101,43 @@ export function buildApp({ logger = false } = {}) {
     });
   });
 
-  // --- Сессия владельца ---------------------------------------------------
+  // --- Регистрация --------------------------------------------------------
+
+  app.post('/api/owners', { schema: { body: ref('OwnerCreate') } }, (request, reply) => {
+    try {
+      const owner = store.createOwner(request.body);
+      const token = store.createSession(owner.id);
+      setSessionCookie(reply, token);
+      return reply.code(201).send({ owner });
+    } catch (error) {
+      if (error.code === 'already_exists') {
+        return reply.code(409).send({
+          code: 'already_exists',
+          message: error.message || 'Email или slug уже заняты',
+        });
+      }
+      throw error;
+    }
+  });
+
+  // --- Сессия -------------------------------------------------------------
 
   app.post('/api/session', { schema: { body: ref('SessionCreate') } }, (request, reply) => {
-    const { email, password } = request.body;
-    if (!store.checkCredentials(email, password)) {
+    const owner = store.checkCredentials(request.body.email, request.body.password);
+    if (!owner) {
       return reply
         .code(401)
         .send({ code: 'unauthorized', message: 'Неверный email или пароль' });
     }
-    const token = store.createSession();
-    reply.setCookie(SESSION_COOKIE, token, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-    });
-    return { owner: store.owner };
+    const token = store.createSession(owner.id);
+    setSessionCookie(reply, token);
+    return { owner };
   });
 
   app.get('/api/session', (request, reply) => {
-    if (!store.hasSession(request.cookies[SESSION_COOKIE])) {
-      return unauthorized(reply);
-    }
-    return { owner: store.owner };
+    const owner = store.getSessionOwner(request.cookies[SESSION_COOKIE]);
+    if (!owner) return unauthorized(reply);
+    return { owner };
   });
 
   app.delete('/api/session', (request, reply) => {
@@ -122,49 +146,80 @@ export function buildApp({ logger = false } = {}) {
     reply.code(204).send();
   });
 
-  // --- Публичные эндпоинты гостя -------------------------------------------
+  // --- Публичные эндпоинты гостя ------------------------------------------
 
-  app.get('/api/event-types', () => store.getEventTypes());
+  app.get('/api/public/:slug', (request, reply) => {
+    const profile = store.getOwnerPublic(request.params.slug);
+    if (!profile) {
+      return reply.code(404).send({ code: 'not_found', message: 'Владелец не найден' });
+    }
+    return profile;
+  });
+
+  app.get('/api/public/:slug/event-types', (request, reply) => {
+    const owner = store.findOwnerBySlug(request.params.slug);
+    if (!owner) {
+      return reply.code(404).send({ code: 'not_found', message: 'Владелец не найден' });
+    }
+    return store.listEventTypes(owner.id);
+  });
 
   app.get(
-    '/api/slots',
+    '/api/public/:slug/slots',
     {
       schema: {
         querystring: {
           type: 'object',
-          required: ['from', 'to'],
+          required: ['from', 'to', 'eventTypeId'],
           properties: {
             from: { type: 'string', format: 'date' },
             to: { type: 'string', format: 'date' },
+            eventTypeId: { type: 'integer' },
           },
         },
       },
     },
     (request, reply) => {
-      const { from, to } = request.query;
+      const owner = store.findOwnerBySlug(request.params.slug);
+      if (!owner) {
+        return reply.code(404).send({ code: 'not_found', message: 'Владелец не найден' });
+      }
+      const { from, to, eventTypeId } = request.query;
       if (dayjs(to).isBefore(dayjs(from))) {
         return reply.code(422).send({
           code: 'validation_error',
           message: 'Начало периода (from) не может быть позже конца (to)',
         });
       }
-      // Период дальше горизонта не ошибка: computeFreeSlots обрежет его сам
+      const eventType = store.findEventType(owner.id, Number(eventTypeId));
+      if (!eventType) {
+        return reply.code(422).send({
+          code: 'validation_error',
+          message: 'Неизвестный тип события',
+          errors: [{ field: 'eventTypeId', message: 'Тип события не найден' }],
+        });
+      }
       return computeFreeSlots({
-        availability: store.getAvailability(),
-        activeBookings: store.getActiveBookings(),
+        availability: store.getAvailability(owner.id),
+        activeBookings: store.getActiveBookings(owner.id),
         from,
         to,
+        durationMinutes: eventType.durationMinutes,
       });
     },
   );
 
   app.post(
-    '/api/bookings',
+    '/api/public/:slug/bookings',
     { schema: { body: ref('BookingCreate') } },
     (request, reply) => {
+      const owner = store.findOwnerBySlug(request.params.slug);
+      if (!owner) {
+        return reply.code(404).send({ code: 'not_found', message: 'Владелец не найден' });
+      }
       const { eventTypeId, startsAt, guestName, guestEmail, comment } = request.body;
-
-      if (!store.findEventType(eventTypeId)) {
+      const eventType = store.findEventType(owner.id, eventTypeId);
+      if (!eventType) {
         return reply.code(422).send({
           code: 'validation_error',
           message: 'Неизвестный тип события',
@@ -172,11 +227,11 @@ export function buildApp({ logger = false } = {}) {
         });
       }
 
-      // Ключевое бизнес-правило: бронировать можно только свободный слот
       const free = isFreeSlot({
-        availability: store.getAvailability(),
-        activeBookings: store.getActiveBookings(),
+        availability: store.getAvailability(owner.id),
+        activeBookings: store.getActiveBookings(owner.id),
         startsAt,
+        durationMinutes: eventType.durationMinutes,
       });
       if (!free) {
         return reply.code(409).send({
@@ -186,10 +241,10 @@ export function buildApp({ logger = false } = {}) {
       }
 
       const start = dayjs(startsAt);
-      const booking = store.createBooking({
+      const booking = store.createBooking(owner.id, {
         eventTypeId,
         startsAt: start.toISOString(),
-        endsAt: start.add(SLOT_MINUTES, 'minute').toISOString(),
+        endsAt: start.add(eventType.durationMinutes, 'minute').toISOString(),
         guestName,
         guestEmail,
         ...(comment !== undefined && { comment }),
@@ -198,12 +253,96 @@ export function buildApp({ logger = false } = {}) {
     },
   );
 
-  // --- Эндпоинты владельца --------------------------------------------------
+  // --- Типы событий владельца ----------------------------------------------
 
-  app.get('/api/bookings', { preHandler: requireOwner }, () => {
+  app.get('/api/event-types', { preHandler: requireOwner }, (request) =>
+    store.listEventTypes(request.owner.id),
+  );
+
+  app.post(
+    '/api/event-types',
+    { preHandler: requireOwner, schema: { body: ref('EventTypeWrite') } },
+    (request, reply) => {
+      const durationError = validateDurationMinutes(request.body.durationMinutes);
+      if (durationError) {
+        return reply.code(422).send({
+          code: 'validation_error',
+          message: durationError,
+          errors: [{ field: 'durationMinutes', message: durationError }],
+        });
+      }
+      const eventType = store.createEventType(request.owner.id, request.body);
+      return reply.code(201).send(eventType);
+    },
+  );
+
+  app.put(
+    '/api/event-types/:id',
+    {
+      preHandler: requireOwner,
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'integer' } },
+        },
+        body: ref('EventTypeWrite'),
+      },
+    },
+    (request, reply) => {
+      const durationError = validateDurationMinutes(request.body.durationMinutes);
+      if (durationError) {
+        return reply.code(422).send({
+          code: 'validation_error',
+          message: durationError,
+          errors: [{ field: 'durationMinutes', message: durationError }],
+        });
+      }
+      const eventType = store.updateEventType(request.owner.id, request.params.id, request.body);
+      if (!eventType) {
+        return reply.code(404).send({ code: 'not_found', message: 'Тип события не найден' });
+      }
+      return eventType;
+    },
+  );
+
+  app.delete(
+    '/api/event-types/:id',
+    {
+      preHandler: requireOwner,
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'integer' } },
+        },
+      },
+    },
+    (request, reply) => {
+      try {
+        const ok = store.deleteEventType(request.owner.id, request.params.id);
+        if (!ok) {
+          return reply.code(404).send({ code: 'not_found', message: 'Тип события не найден' });
+        }
+        reply.code(204).send();
+      } catch (error) {
+        if (error.code === 'validation_error') {
+          return reply.code(422).send({
+            code: 'validation_error',
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // --- Бронирования владельца ---------------------------------------------
+
+  app.get('/api/bookings', { preHandler: requireOwner }, (request) => {
     const now = dayjs();
     return store
-      .getActiveBookings()
+      .getActiveBookings(request.owner.id)
       .filter((b) => dayjs(b.startsAt).isAfter(now))
       .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   });
@@ -221,16 +360,19 @@ export function buildApp({ logger = false } = {}) {
       },
     },
     (request, reply) => {
-      const booking = store.findActiveBooking(request.params.id);
-      if (!booking) {
+      const ok = store.cancelBooking(request.owner.id, request.params.id);
+      if (!ok) {
         return reply.code(404).send({ code: 'not_found', message: 'Встреча не найдена' });
       }
-      store.cancelBooking(booking);
       reply.code(204).send();
     },
   );
 
-  app.get('/api/availability', { preHandler: requireOwner }, () => store.getAvailability());
+  // --- Доступность --------------------------------------------------------
+
+  app.get('/api/availability', { preHandler: requireOwner }, (request) =>
+    store.getAvailability(request.owner.id),
+  );
 
   app.put(
     '/api/availability',
@@ -244,7 +386,7 @@ export function buildApp({ logger = false } = {}) {
           errors,
         });
       }
-      return store.setAvailability(request.body);
+      return store.setAvailability(request.owner.id, request.body);
     },
   );
 

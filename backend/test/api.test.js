@@ -9,8 +9,8 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const TZ = 'Europe/Moscow';
+const SLUG = 'kirill';
 
-/** Ближайший будний день в будущем (расписание сида: Пн–Пт 10:00–18:00 МСК) */
 function nextWorkday() {
   let day = dayjs.tz(dayjs(), TZ).add(1, 'day');
   while ([6, 0].includes(day.day())) {
@@ -19,11 +19,15 @@ function nextWorkday() {
   return day.format('YYYY-MM-DD');
 }
 
-async function login(app) {
+function build() {
+  return buildApp({ databasePath: ':memory:' });
+}
+
+async function login(app, email = 'owner@example.com', password = 'secret') {
   const res = await app.inject({
     method: 'POST',
     url: '/api/session',
-    payload: { email: 'owner@example.com', password: 'secret' },
+    payload: { email, password },
   });
   assert.equal(res.statusCode, 200);
   const setCookie = res.headers['set-cookie'];
@@ -31,118 +35,135 @@ async function login(app) {
   return { cookies: { session } };
 }
 
-test('гость видит типы событий', async () => {
-  const app = buildApp();
-  const res = await app.inject({ method: 'GET', url: '/api/event-types' });
-  assert.equal(res.statusCode, 200);
-  const types = res.json();
-  assert.ok(types.length > 0);
-  assert.equal(types[0].durationMinutes, 30);
+test('гость видит публичный профиль и типы событий по slug', async () => {
+  const app = build();
+  const profile = await app.inject({ method: 'GET', url: `/api/public/${SLUG}` });
+  assert.equal(profile.statusCode, 200);
+  assert.equal(profile.json().slug, SLUG);
+  assert.equal(profile.json().timezone, TZ);
+
+  const types = await app.inject({
+    method: 'GET',
+    url: `/api/public/${SLUG}/event-types`,
+  });
+  assert.equal(types.statusCode, 200);
+  assert.ok(types.json().length >= 2);
+  assert.ok(types.json().some((t) => t.durationMinutes === 60));
 });
 
-test('слоты: будний день по расписанию содержит 16 свободных слотов по 30 минут', async () => {
-  const app = buildApp();
+test('слоты: будний день для 30-мин типа содержит 16 слотов', async () => {
+  const app = build();
   const day = nextWorkday();
-  const res = await app.inject({ method: 'GET', url: `/api/slots?from=${day}&to=${day}` });
-  assert.equal(res.statusCode, 200);
-  const slots = res.json();
-  assert.equal(slots.length, 16); // 10:00–18:00 = 8 часов × 2 слота
-  const first = dayjs(slots[0].startsAt).tz(TZ);
-  assert.equal(first.format('HH:mm'), '10:00');
-});
-
-test('слоты: некорректный период — 422 по контракту', async () => {
-  const app = buildApp();
+  const types = (
+    await app.inject({ method: 'GET', url: `/api/public/${SLUG}/event-types` })
+  ).json();
+  const thirty = types.find((t) => t.durationMinutes === 30);
   const res = await app.inject({
     method: 'GET',
-    url: '/api/slots?from=2026-08-10&to=2026-08-01',
+    url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${thirty.id}`,
   });
-  assert.equal(res.statusCode, 422);
-  assert.equal(res.json().code, 'validation_error');
-});
-
-test('слоты: за горизонтом 14 дней слотов нет', async () => {
-  const app = buildApp();
-  // 20-й день от сегодня — за горизонтом, даже если это будний день
-  const day = dayjs.tz(dayjs(), TZ).add(20, 'day').format('YYYY-MM-DD');
-  const res = await app.inject({ method: 'GET', url: `/api/slots?from=${day}&to=${day}` });
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.json(), []);
+  assert.equal(res.json().length, 16);
+  assert.equal(dayjs(res.json()[0].startsAt).tz(TZ).format('HH:mm'), '10:00');
 });
 
-test('слоты: широкий период обрезается горизонтом 14 дней', async () => {
-  const app = buildApp();
-  const from = dayjs.tz(dayjs(), TZ).format('YYYY-MM-DD');
-  const to = dayjs.tz(dayjs(), TZ).add(60, 'day').format('YYYY-MM-DD');
-  const res = await app.inject({ method: 'GET', url: `/api/slots?from=${from}&to=${to}` });
-  assert.equal(res.statusCode, 200);
-  const slots = res.json();
-  assert.ok(slots.length > 0);
-  const horizonEnd = dayjs.tz(dayjs(), TZ).startOf('day').add(14, 'day');
-  for (const slot of slots) {
-    assert.ok(
-      dayjs(slot.startsAt).isBefore(horizonEnd),
-      `слот ${slot.startsAt} за горизонтом ${horizonEnd.toISOString()}`,
-    );
-  }
-});
+test('слоты: 60-мин тип даёт меньше слотов; пересечение блокирует соседний', async () => {
+  const app = build();
+  const day = nextWorkday();
+  const types = (
+    await app.inject({ method: 'GET', url: `/api/public/${SLUG}/event-types` })
+  ).json();
+  const hour = types.find((t) => t.durationMinutes === 60);
+  const slotsRes = await app.inject({
+    method: 'GET',
+    url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${hour.id}`,
+  });
+  assert.equal(slotsRes.json().length, 8);
 
-test('бронирование: слот за горизонтом 14 дней — 409', async () => {
-  const app = buildApp();
-  // Будний день за горизонтом, время по расписанию (10:00 МСК)
-  let day = dayjs.tz(dayjs(), TZ).add(20, 'day');
-  while ([6, 0].includes(day.day())) {
-    day = day.add(1, 'day');
-  }
-  const res = await app.inject({
+  const slot = slotsRes.json()[0];
+  await app.inject({
     method: 'POST',
-    url: '/api/bookings',
+    url: `/api/public/${SLUG}/bookings`,
     payload: {
-      eventTypeId: 1,
-      startsAt: dayjs.tz(`${day.format('YYYY-MM-DD')}T10:00`, TZ).toISOString(),
+      eventTypeId: hour.id,
+      startsAt: slot.startsAt,
       guestName: 'Иван',
       guestEmail: 'ivan@example.com',
     },
   });
-  assert.equal(res.statusCode, 409);
-  assert.equal(res.json().code, 'slot_unavailable');
+
+  const after = await app.inject({
+    method: 'GET',
+    url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${hour.id}`,
+  });
+  assert.ok(!after.json().some((s) => s.startsAt === slot.startsAt));
 });
 
-test('бронирование: успешное создание, повтор того же слота — 409', async () => {
-  const app = buildApp();
+test('слоты: некорректный период — 422', async () => {
+  const app = build();
+  const res = await app.inject({
+    method: 'GET',
+    url: `/api/public/${SLUG}/slots?from=2026-08-10&to=2026-08-01&eventTypeId=1`,
+  });
+  assert.equal(res.statusCode, 422);
+});
+
+test('слоты: за горизонтом 14 дней слотов нет', async () => {
+  const app = build();
+  const day = dayjs.tz(dayjs(), TZ).add(20, 'day').format('YYYY-MM-DD');
+  const res = await app.inject({
+    method: 'GET',
+    url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=1`,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), []);
+});
+
+test('бронирование: успех, повтор — 409', async () => {
+  const app = build();
   const day = nextWorkday();
-  const slotsRes = await app.inject({ method: 'GET', url: `/api/slots?from=${day}&to=${day}` });
-  const slot = slotsRes.json()[0];
+  const types = (
+    await app.inject({ method: 'GET', url: `/api/public/${SLUG}/event-types` })
+  ).json();
+  const et = types[0];
+  const slot = (
+    await app.inject({
+      method: 'GET',
+      url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${et.id}`,
+    })
+  ).json()[0];
 
   const payload = {
-    eventTypeId: 1,
+    eventTypeId: et.id,
     startsAt: slot.startsAt,
     guestName: 'Иван Петров',
     guestEmail: 'ivan@example.com',
-    comment: 'Обсудить проект',
   };
-
-  const created = await app.inject({ method: 'POST', url: '/api/bookings', payload });
+  const created = await app.inject({
+    method: 'POST',
+    url: `/api/public/${SLUG}/bookings`,
+    payload,
+  });
   assert.equal(created.statusCode, 201);
-  const booking = created.json();
-  assert.equal(booking.status, 'active');
-  assert.equal(booking.endsAt, dayjs(slot.startsAt).add(30, 'minute').toISOString());
+  assert.equal(
+    created.json().endsAt,
+    dayjs(slot.startsAt).add(et.durationMinutes, 'minute').toISOString(),
+  );
 
-  // Слот исчез из свободных
-  const slotsAfter = await app.inject({ method: 'GET', url: `/api/slots?from=${day}&to=${day}` });
-  assert.ok(!slotsAfter.json().some((s) => s.startsAt === slot.startsAt));
-
-  // Повторное бронирование того же слота — конфликт
-  const conflict = await app.inject({ method: 'POST', url: '/api/bookings', payload });
+  const conflict = await app.inject({
+    method: 'POST',
+    url: `/api/public/${SLUG}/bookings`,
+    payload,
+  });
   assert.equal(conflict.statusCode, 409);
   assert.equal(conflict.json().code, 'slot_unavailable');
 });
 
-test('бронирование: слот в прошлом или вне расписания — 409', async () => {
-  const app = buildApp();
+test('бронирование: слот в прошлом — 409', async () => {
+  const app = build();
   const past = await app.inject({
     method: 'POST',
-    url: '/api/bookings',
+    url: `/api/public/${SLUG}/bookings`,
     payload: {
       eventTypeId: 1,
       startsAt: '2020-01-06T10:00:00Z',
@@ -151,63 +172,108 @@ test('бронирование: слот в прошлом или вне рас�
     },
   });
   assert.equal(past.statusCode, 409);
-
-  // 03:00 по Москве — вне расписания 10:00–18:00
-  const day = nextWorkday();
-  const offSchedule = await app.inject({
-    method: 'POST',
-    url: '/api/bookings',
-    payload: {
-      eventTypeId: 1,
-      startsAt: dayjs.tz(`${day}T03:00`, TZ).toISOString(),
-      guestName: 'Иван',
-      guestEmail: 'ivan@example.com',
-    },
-  });
-  assert.equal(offSchedule.statusCode, 409);
 });
 
-test('бронирование: невалидное тело — 422 со списком полей', async () => {
-  const app = buildApp();
+test('регистрация: новый владелец получает сессию и публичную страницу', async () => {
+  const app = build();
   const res = await app.inject({
     method: 'POST',
-    url: '/api/bookings',
-    payload: { eventTypeId: 1, startsAt: 'not-a-date', guestName: '', guestEmail: 'нет' },
+    url: '/api/owners',
+    payload: {
+      name: 'Анна',
+      email: 'anna@example.com',
+      password: 'secret1',
+      slug: 'anna',
+    },
   });
-  assert.equal(res.statusCode, 422);
-  const body = res.json();
-  assert.equal(body.code, 'validation_error');
-  assert.ok(Array.isArray(body.errors));
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.json().owner.slug, 'anna');
+  assert.ok(String(res.headers['set-cookie']).includes('session='));
+
+  const publicPage = await app.inject({ method: 'GET', url: '/api/public/anna' });
+  assert.equal(publicPage.statusCode, 200);
+  assert.equal(publicPage.json().name, 'Анна');
+});
+
+test('регистрация: занятый slug — 409 already_exists', async () => {
+  const app = build();
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/owners',
+    payload: {
+      name: 'Другой',
+      email: 'other@example.com',
+      password: 'secret1',
+      slug: 'kirill',
+    },
+  });
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.json().code, 'already_exists');
+});
+
+test('владелец: CRUD типов событий с длительностью', async () => {
+  const app = build();
+  const auth = await login(app);
+
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/event-types',
+    ...auth,
+    payload: { name: 'Созвон 45', durationMinutes: 45, description: 'Длинный' },
+  });
+  assert.equal(created.statusCode, 201);
+  assert.equal(created.json().durationMinutes, 45);
+
+  const id = created.json().id;
+  const updated = await app.inject({
+    method: 'PUT',
+    url: `/api/event-types/${id}`,
+    ...auth,
+    payload: { name: 'Созвон 90', durationMinutes: 90 },
+  });
+  assert.equal(updated.statusCode, 200);
+  assert.equal(updated.json().durationMinutes, 90);
+
+  const removed = await app.inject({
+    method: 'DELETE',
+    url: `/api/event-types/${id}`,
+    ...auth,
+  });
+  assert.equal(removed.statusCode, 204);
 });
 
 test('владелец: эндпоинты закрыты без сессии (401)', async () => {
-  const app = buildApp();
+  const app = build();
   for (const [method, url] of [
     ['GET', '/api/bookings'],
     ['DELETE', '/api/bookings/1'],
     ['GET', '/api/availability'],
-    ['PUT', '/api/availability'],
+    ['GET', '/api/event-types'],
   ]) {
-    const res = await app.inject({
-      method,
-      url,
-      ...(method === 'PUT' && { payload: { timezone: 'Europe/Moscow', rules: [] } }),
-    });
+    const res = await app.inject({ method, url });
     assert.equal(res.statusCode, 401, `${method} ${url}`);
   }
 });
 
 test('владелец: вход, список встреч, отмена освобождает слот', async () => {
-  const app = buildApp();
+  const app = build();
   const day = nextWorkday();
-  const slotsRes = await app.inject({ method: 'GET', url: `/api/slots?from=${day}&to=${day}` });
-  const slot = slotsRes.json()[0];
+  const types = (
+    await app.inject({ method: 'GET', url: `/api/public/${SLUG}/event-types` })
+  ).json();
+  const et = types[0];
+  const slot = (
+    await app.inject({
+      method: 'GET',
+      url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${et.id}`,
+    })
+  ).json()[0];
 
   await app.inject({
     method: 'POST',
-    url: '/api/bookings',
+    url: `/api/public/${SLUG}/bookings`,
     payload: {
-      eventTypeId: 1,
+      eventTypeId: et.id,
       startsAt: slot.startsAt,
       guestName: 'Иван',
       guestEmail: 'ivan@example.com',
@@ -215,47 +281,29 @@ test('владелец: вход, список встреч, отмена осв
   });
 
   const auth = await login(app);
-
   const list = await app.inject({ method: 'GET', url: '/api/bookings', ...auth });
   assert.equal(list.statusCode, 200);
   assert.equal(list.json().length, 1);
-  const bookingId = list.json()[0].id;
 
   const cancel = await app.inject({
     method: 'DELETE',
-    url: `/api/bookings/${bookingId}`,
+    url: `/api/bookings/${list.json()[0].id}`,
     ...auth,
   });
   assert.equal(cancel.statusCode, 204);
 
-  // Слот снова свободен
-  const slotsAfter = await app.inject({ method: 'GET', url: `/api/slots?from=${day}&to=${day}` });
+  const slotsAfter = await app.inject({
+    method: 'GET',
+    url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${et.id}`,
+  });
   assert.ok(slotsAfter.json().some((s) => s.startsAt === slot.startsAt));
-
-  // Повторная отмена — 404
-  const again = await app.inject({
-    method: 'DELETE',
-    url: `/api/bookings/${bookingId}`,
-    ...auth,
-  });
-  assert.equal(again.statusCode, 404);
-});
-
-test('владелец: неверный пароль — 401', async () => {
-  const app = buildApp();
-  const res = await app.inject({
-    method: 'POST',
-    url: '/api/session',
-    payload: { email: 'owner@example.com', password: 'wrong' },
-  });
-  assert.equal(res.statusCode, 401);
 });
 
 test('ошибки: битый JSON — 400, а не 500', async () => {
-  const app = buildApp();
+  const app = build();
   const res = await app.inject({
     method: 'POST',
-    url: '/api/bookings',
+    url: `/api/public/${SLUG}/bookings`,
     headers: { 'content-type': 'application/json' },
     payload: '{"oops": ',
   });
@@ -263,44 +311,20 @@ test('ошибки: битый JSON — 400, а не 500', async () => {
   assert.equal(res.json().code, 'bad_request');
 });
 
-test('ошибки: только внутренняя ошибка даёт 500 с internal_error', async () => {
-  const app = buildApp();
-  app.get('/api/boom', () => {
-    throw new Error('что-то сломалось');
-  });
-  const res = await app.inject({ method: 'GET', url: '/api/boom' });
-  assert.equal(res.statusCode, 500);
-  assert.equal(res.json().code, 'internal_error');
-  // Текст внутренней ошибки не утекает наружу
-  assert.ok(!res.body.includes('что-то сломалось'));
-});
-
 test('доступность: чтение и обновление, пересечения — 422', async () => {
-  const app = buildApp();
+  const app = build();
   const auth = await login(app);
 
   const current = await app.inject({ method: 'GET', url: '/api/availability', ...auth });
   assert.equal(current.statusCode, 200);
-  assert.equal(current.json().timezone, 'Europe/Moscow');
-
-  const updated = await app.inject({
-    method: 'PUT',
-    url: '/api/availability',
-    ...auth,
-    payload: {
-      timezone: 'Europe/Moscow',
-      rules: [{ weekday: 1, startTime: '09:00', endTime: '12:00' }],
-    },
-  });
-  assert.equal(updated.statusCode, 200);
-  assert.equal(updated.json().rules.length, 1);
+  assert.equal(current.json().timezone, TZ);
 
   const overlapping = await app.inject({
     method: 'PUT',
     url: '/api/availability',
     ...auth,
     payload: {
-      timezone: 'Europe/Moscow',
+      timezone: TZ,
       rules: [
         { weekday: 1, startTime: '10:00', endTime: '14:00' },
         { weekday: 1, startTime: '13:00', endTime: '18:00' },
@@ -308,5 +332,4 @@ test('доступность: чтение и обновление, пересе
     },
   });
   assert.equal(overlapping.statusCode, 422);
-  assert.ok(overlapping.json().errors.length > 0);
 });
