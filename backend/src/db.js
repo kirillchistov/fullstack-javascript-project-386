@@ -25,6 +25,8 @@ function columnExists(db, table, column) {
 }
 
 function migrate(db) {
+  // CREATE TABLE IF NOT EXISTS не обновляет уже существующие таблицы:
+  // колонки P1 добавляются ниже через ALTER, индексы — только после них.
   db.exec(`
     CREATE TABLE IF NOT EXISTS owners (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,9 +54,7 @@ function migrate(db) {
     CREATE TABLE IF NOT EXISTS availability (
       owner_id INTEGER PRIMARY KEY REFERENCES owners(id) ON DELETE CASCADE,
       timezone TEXT NOT NULL,
-      rules_json TEXT NOT NULL,
-      buffer_minutes INTEGER NOT NULL DEFAULT 0,
-      exceptions_json TEXT NOT NULL DEFAULT '[]'
+      rules_json TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS bookings (
@@ -67,9 +67,7 @@ function migrate(db) {
       guest_email TEXT NOT NULL,
       comment TEXT,
       status TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      manage_token TEXT UNIQUE,
-      reminder_sent_at TEXT
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS notification_settings (
@@ -81,11 +79,9 @@ function migrate(db) {
 
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_status
       ON bookings(owner_id, status, starts_at);
-    CREATE INDEX IF NOT EXISTS idx_bookings_manage_token
-      ON bookings(manage_token);
   `);
 
-  // Миграции для БД, созданных до P1
+  // Миграции для БД, созданных до P1 (и для свежих таблиц без новых колонок)
   if (!columnExists(db, 'availability', 'buffer_minutes')) {
     db.exec('ALTER TABLE availability ADD COLUMN buffer_minutes INTEGER NOT NULL DEFAULT 0');
   }
@@ -98,6 +94,11 @@ function migrate(db) {
   if (!columnExists(db, 'bookings', 'reminder_sent_at')) {
     db.exec('ALTER TABLE bookings ADD COLUMN reminder_sent_at TEXT');
   }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_bookings_manage_token
+      ON bookings(manage_token);
+  `);
 
   // Токены для старых броней без manage_token
   const withoutToken = db
