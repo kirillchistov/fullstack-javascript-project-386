@@ -179,4 +179,7 @@ cd frontend && npm run preview:demo # локальный предпросмот�
 - [project-spec.md](./project-spec.md) — архитектурное решение, доменная модель, трассировка сценариев на API-контракт
 - [spec/](./spec/) — TypeSpec-исходники API-контракта (источник истины)
 - [docs/api/openapi.yaml](./docs/api/openapi.yaml) — скомпилированный OpenAPI 3 контракт (генерируется, руками не редактируется)
-- [how-it-works.md](./how-it-works.md) — архитектура проекта и схема взаимодействия клиент–сервер ()
+- [docs/backlog.md](./docs/backlog.md) — сегменты аудитории, JTBD, монетизация и приоритизированный бэклог после MVP
+- [docs/e2e-scenarios.md](./docs/e2e-scenarios.md) — реестр тест-кейсов (e2e, компонентные, юнит)
+- [how-it-works.md](./how-it-works.md) — архитектура проекта и схема взаимодействия клиент–сервер
+- [AGENTS.md](./AGENTS.md) — Design First и Conventional Commits для людей и ИИ-агентов
