@@ -94,7 +94,7 @@ export async function mockCreateBooking(
       status: 'active',
       createdAt: dayjs().toISOString(),
     };
-    return route.fulfill({ status: 201, json: booking });
+    return route.fulfill({ status: 201, json: { ...booking, manageToken: 'demo-token' } });
   });
 }
 

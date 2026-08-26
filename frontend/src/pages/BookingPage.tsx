@@ -20,8 +20,8 @@ import { notifications } from '@mantine/notifications';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
-import { useParams } from 'react-router-dom';
-import { api, type Booking, type EventType, type OwnerPublic, type Slot } from '../api/client';
+import { Link, useParams } from 'react-router-dom';
+import { api, type BookingCreated, type EventType, type OwnerPublic, type Slot } from '../api/client';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -51,7 +51,7 @@ export default function BookingPage() {
   const [guestEmail, setGuestEmail] = useState('');
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [booking, setBooking] = useState<Booking | null>(null);
+  const [booking, setBooking] = useState<BookingCreated | null>(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -162,6 +162,14 @@ export default function BookingPage() {
               {guestTimezone})
             </Text>
             <Text c="dimmed">Подтверждение отправлено на {booking.guestEmail}</Text>
+            {booking.manageToken && (
+              <Text size="sm">
+                Отменить или перенести:{' '}
+                <Text span component={Link} to={`/b/${booking.manageToken}`} c="blue">
+                  открыть управление встречей
+                </Text>
+              </Text>
+            )}
           </Stack>
         </Alert>
         <Button

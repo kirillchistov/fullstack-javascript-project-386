@@ -19,6 +19,11 @@ export function openDatabase(databasePath = process.env.DATABASE_PATH) {
   return db;
 }
 
+function columnExists(db, table, column) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  return cols.some((c) => c.name === column);
+}
+
 function migrate(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS owners (
@@ -47,7 +52,9 @@ function migrate(db) {
     CREATE TABLE IF NOT EXISTS availability (
       owner_id INTEGER PRIMARY KEY REFERENCES owners(id) ON DELETE CASCADE,
       timezone TEXT NOT NULL,
-      rules_json TEXT NOT NULL
+      rules_json TEXT NOT NULL,
+      buffer_minutes INTEGER NOT NULL DEFAULT 0,
+      exceptions_json TEXT NOT NULL DEFAULT '[]'
     );
 
     CREATE TABLE IF NOT EXISTS bookings (
@@ -60,15 +67,53 @@ function migrate(db) {
       guest_email TEXT NOT NULL,
       comment TEXT,
       status TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      manage_token TEXT UNIQUE,
+      reminder_sent_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      owner_id INTEGER PRIMARY KEY REFERENCES owners(id) ON DELETE CASCADE,
+      email_enabled INTEGER NOT NULL DEFAULT 1,
+      telegram_chat_id TEXT,
+      reminder_hours_before INTEGER NOT NULL DEFAULT 24
     );
 
     CREATE INDEX IF NOT EXISTS idx_bookings_owner_status
       ON bookings(owner_id, status, starts_at);
+    CREATE INDEX IF NOT EXISTS idx_bookings_manage_token
+      ON bookings(manage_token);
   `);
+
+  // Миграции для БД, созданных до P1
+  if (!columnExists(db, 'availability', 'buffer_minutes')) {
+    db.exec('ALTER TABLE availability ADD COLUMN buffer_minutes INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnExists(db, 'availability', 'exceptions_json')) {
+    db.exec(`ALTER TABLE availability ADD COLUMN exceptions_json TEXT NOT NULL DEFAULT '[]'`);
+  }
+  if (!columnExists(db, 'bookings', 'manage_token')) {
+    db.exec('ALTER TABLE bookings ADD COLUMN manage_token TEXT');
+  }
+  if (!columnExists(db, 'bookings', 'reminder_sent_at')) {
+    db.exec('ALTER TABLE bookings ADD COLUMN reminder_sent_at TEXT');
+  }
+
+  // Токены для старых броней без manage_token
+  const withoutToken = db
+    .prepare(`SELECT id FROM bookings WHERE manage_token IS NULL OR manage_token = ''`)
+    .all();
+  const setToken = db.prepare('UPDATE bookings SET manage_token = ? WHERE id = ?');
+  for (const row of withoutToken) {
+    setToken.run(cryptoRandom(), row.id);
+  }
 }
 
-/** Сид для локальной разработки, Docker и e2e: один владелец kirill / secret */
+function cryptoRandom() {
+  return globalThis.crypto.randomUUID();
+}
+
+/** Сид для локальной разработки, Docker и e2e */
 function seedIfEmpty(db) {
   const row = db.prepare('SELECT COUNT(*) AS c FROM owners').get();
   if (row.c > 0) return;
@@ -80,11 +125,12 @@ function seedIfEmpty(db) {
   const slug = process.env.OWNER_SLUG ?? 'kirill';
   const timezone = process.env.OWNER_TIMEZONE ?? 'Europe/Moscow';
 
-  const insertOwner = db.prepare(`
-    INSERT INTO owners (name, email, slug, password_hash, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  const result = insertOwner.run(name, email, slug, hashPassword(password), now);
+  const result = db
+    .prepare(
+      `INSERT INTO owners (name, email, slug, password_hash, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(name, email, slug, hashPassword(password), now);
   const ownerId = Number(result.lastInsertRowid);
 
   const rules = [1, 2, 3, 4, 5].map((weekday) => ({
@@ -93,8 +139,14 @@ function seedIfEmpty(db) {
     endTime: '18:00',
   }));
   db.prepare(
-    'INSERT INTO availability (owner_id, timezone, rules_json) VALUES (?, ?, ?)',
+    `INSERT INTO availability (owner_id, timezone, rules_json, buffer_minutes, exceptions_json)
+     VALUES (?, ?, ?, 0, '[]')`,
   ).run(ownerId, timezone, JSON.stringify(rules));
+
+  db.prepare(
+    `INSERT INTO notification_settings (owner_id, email_enabled, reminder_hours_before)
+     VALUES (?, 1, 24)`,
+  ).run(ownerId);
 
   const insertEt = db.prepare(`
     INSERT INTO event_types (owner_id, name, description, duration_minutes)

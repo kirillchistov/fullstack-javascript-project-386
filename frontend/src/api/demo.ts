@@ -7,7 +7,7 @@ import type { Availability, Booking, BookingCreate, EventType, Owner } from './c
  * упрощение демо), брони и настройки сохраняются в localStorage.
  */
 
-const STORAGE_KEY = 'call-calendar-demo-v2';
+const STORAGE_KEY = 'call-calendar-demo-v3';
 
 const OWNER: Owner = {
   id: 1,
@@ -16,24 +16,33 @@ const OWNER: Owner = {
   slug: 'kirill',
 };
 
+type DemoBooking = Booking & { manageToken: string };
+
 type DemoState = {
   availability: Availability;
   eventTypes: EventType[];
-  bookings: Booking[];
+  bookings: DemoBooking[];
   nextBookingId: number;
   nextEventTypeId: number;
   loggedIn: boolean;
   owners: Array<Owner & { password: string }>;
+  notificationSettings: {
+    emailEnabled: boolean;
+    telegramChatId?: string;
+    reminderHoursBefore: number;
+  };
 };
 
 const defaultState = (): DemoState => ({
   availability: {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Moscow',
+    bufferMinutes: 0,
     rules: [1, 2, 3, 4, 5].map((weekday) => ({
       weekday,
       startTime: '10:00',
       endTime: '18:00',
     })),
+    exceptions: [],
   },
   eventTypes: [
     {
@@ -54,12 +63,28 @@ const defaultState = (): DemoState => ({
   nextEventTypeId: 3,
   loggedIn: false,
   owners: [{ ...OWNER, password: 'secret' }],
+  notificationSettings: {
+    emailEnabled: true,
+    reminderHoursBefore: 24,
+  },
 });
 
 function loadState(): DemoState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...defaultState(), ...(JSON.parse(raw) as DemoState) };
+    if (raw) {
+      const parsed = JSON.parse(raw) as DemoState;
+      return {
+        ...defaultState(),
+        ...parsed,
+        availability: {
+          ...defaultState().availability,
+          ...parsed.availability,
+          bufferMinutes: parsed.availability?.bufferMinutes ?? 0,
+          exceptions: parsed.availability?.exceptions ?? [],
+        },
+      };
+    }
   } catch {
     // повреждённое состояние — начинаем заново
   }
@@ -216,7 +241,7 @@ export async function demoFetch(input: Request): Promise<Response> {
           409,
         );
       }
-      const booking: Booking = {
+      const booking: DemoBooking = {
         id: state.nextBookingId,
         eventTypeId: body.eventTypeId,
         startsAt: startsAt.toISOString(),
@@ -226,11 +251,52 @@ export async function demoFetch(input: Request): Promise<Response> {
         comment: body.comment,
         status: 'active',
         createdAt: dayjs().toISOString(),
+        manageToken: crypto.randomUUID(),
       };
       state.nextBookingId += 1;
       state.bookings.push(booking);
       save();
       return json(booking, 201);
+    }
+  }
+
+  const guestMatch = path.match(/^\/api\/guest\/bookings\/([^/]+)$/);
+  if (guestMatch) {
+    const manageToken = decodeURIComponent(guestMatch[1]);
+    const booking = state.bookings.find((b) => b.manageToken === manageToken);
+    if (!booking) {
+      return json({ code: 'not_found', message: 'Встреча не найдена' }, 404);
+    }
+    const et = state.eventTypes.find((t) => t.id === booking.eventTypeId);
+    const guestView = () => ({
+      id: booking.id,
+      eventTypeName: et?.name ?? 'Встреча',
+      durationMinutes: et?.durationMinutes ?? 30,
+      ownerName: OWNER.name,
+      ownerSlug: OWNER.slug,
+      ownerTimezone: state.availability.timezone,
+      startsAt: booking.startsAt,
+      endsAt: booking.endsAt,
+      guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      comment: booking.comment,
+      status: booking.status,
+    });
+
+    if (method === 'GET') return json(guestView());
+    if (method === 'DELETE') {
+      booking.status = 'cancelled';
+      save();
+      return new Response(null, { status: 204 });
+    }
+    if (method === 'PATCH') {
+      const body = (await input.json()) as { startsAt: string };
+      const duration = et?.durationMinutes ?? 30;
+      const start = dayjs(body.startsAt);
+      booking.startsAt = start.toISOString();
+      booking.endsAt = start.add(duration, 'minute').toISOString();
+      save();
+      return json(guestView());
     }
   }
 
@@ -319,6 +385,18 @@ export async function demoFetch(input: Request): Promise<Response> {
     state.availability = (await input.json()) as Availability;
     save();
     return json(state.availability);
+  }
+
+  if (path === '/api/notification-settings' && method === 'GET') {
+    if (!state.loggedIn) return unauthorized();
+    return json(state.notificationSettings);
+  }
+
+  if (path === '/api/notification-settings' && method === 'PUT') {
+    if (!state.loggedIn) return unauthorized();
+    state.notificationSettings = (await input.json()) as DemoState['notificationSettings'];
+    save();
+    return json(state.notificationSettings);
   }
 
   return json({ code: 'not_found', message: 'Неизвестный маршрут' }, 404);

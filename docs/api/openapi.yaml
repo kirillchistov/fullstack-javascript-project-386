@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
   title: Call Calendar API
-  version: 0.2.0
+  version: 0.3.0
   description: |-
     Call Calendar — сервис «Запись на звонок».
 
@@ -23,7 +23,6 @@ paths:
   /api/availability:
     get:
       operationId: AvailabilityRoutes_getAvailability
-      description: Текущие настройки доступности
       parameters: []
       responses:
         '200':
@@ -46,7 +45,8 @@ paths:
       operationId: AvailabilityRoutes_updateAvailability
       description: |-
         Полная замена настроек доступности.
-        Интервалы каждого правила должны быть кратны 15 минутам и не пересекаться в рамках дня.
+        Правила и интервалы исключений кратны 15 минутам и не пересекаются в рамках дня.
+        Перерыв = два правила в один weekday с разрывом между ними.
       parameters: []
       responses:
         '200':
@@ -80,7 +80,6 @@ paths:
   /api/bookings:
     get:
       operationId: OwnerBookingRoutes_list
-      description: Владелец смотрит список предстоящих встреч (только активные, от текущего момента)
       parameters: []
       responses:
         '200':
@@ -104,7 +103,6 @@ paths:
   /api/bookings/{id}:
     delete:
       operationId: OwnerBookingRoutes_cancel
-      description: Владелец отменяет встречу (перевод в статус cancelled, слот снова свободен)
       parameters:
         - name: id
           in: path
@@ -134,7 +132,6 @@ paths:
   /api/event-types:
     get:
       operationId: OwnerEventTypeRoutes_list
-      description: Список своих типов событий
       parameters: []
       responses:
         '200':
@@ -157,7 +154,6 @@ paths:
         - ApiKeyAuth: []
     post:
       operationId: OwnerEventTypeRoutes_create
-      description: Создать тип события
       parameters: []
       responses:
         '201':
@@ -191,7 +187,6 @@ paths:
   /api/event-types/{id}:
     put:
       operationId: OwnerEventTypeRoutes_update
-      description: Обновить тип события
       parameters:
         - name: id
           in: path
@@ -236,7 +231,6 @@ paths:
         - ApiKeyAuth: []
     delete:
       operationId: OwnerEventTypeRoutes_remove
-      description: Удалить тип события (если нет активных будущих броней)
       parameters:
         - name: id
           in: path
@@ -267,6 +261,148 @@ paths:
                 $ref: '#/components/schemas/ValidationError'
       tags:
         - Owner
+      security:
+        - ApiKeyAuth: []
+  /api/guest/bookings/{token}:
+    get:
+      operationId: GuestBookingRoutes_get
+      description: Карточка встречи по секретной ссылке
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestBooking'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+      tags:
+        - Guest
+    delete:
+      operationId: GuestBookingRoutes_cancel
+      description: Отмена встречи гостем
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+      tags:
+        - Guest
+    patch:
+      operationId: GuestBookingRoutes_reschedule
+      description: |-
+        Перенос на другой свободный слот того же типа события.
+        409 — новый слот недоступен.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestBooking'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '409':
+          description: '409 — конфликт: слот уже занят или находится в прошлом'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Guest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingReschedule'
+  /api/notification-settings:
+    get:
+      operationId: NotificationSettingsRoutes_get
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSettings'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
+    put:
+      operationId: NotificationSettingsRoutes_update
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSettings'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationSettings'
       security:
         - ApiKeyAuth: []
   /api/owners:
@@ -333,9 +469,8 @@ paths:
     post:
       operationId: PublicRoutes_createBooking
       description: |-
-        Гость создаёт бронирование на свободный слот владельца.
-        409 — слот занят (пересечение с другой бронью), в прошлом, вне расписания
-        или дальше горизонта бронирования (14 дней).
+        Гость создаёт бронирование. В ответе — manageToken для отмены/переноса.
+        409 — слот занят с учётом буфера, в прошлом, вне расписания или за горизонтом.
       parameters:
         - name: slug
           in: path
@@ -348,7 +483,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Booking'
+                $ref: '#/components/schemas/BookingCreated'
         '404':
           description: 404 — ресурс не найден
           content:
@@ -407,8 +542,8 @@ paths:
       operationId: PublicRoutes_listSlots
       description: |-
         Свободные слоты за период [from, to] для выбранного типа события.
+        Учитываются буфер между встречами и исключения (праздники/отпуск).
         Длина слота = durationMinutes типа. Горизонт — 14 дней включая сегодня.
-        Даты from/to интерпретируются в таймзоне владельца.
       parameters:
         - name: slug
           in: path
@@ -418,7 +553,6 @@ paths:
         - name: eventTypeId
           in: query
           required: true
-          description: 'Тип события: определяет длительность слота'
           schema:
             type: integer
             format: int32
@@ -426,7 +560,6 @@ paths:
         - name: from
           in: query
           required: true
-          description: Начало периода, YYYY-MM-DD
           schema:
             type: string
             format: date
@@ -434,7 +567,6 @@ paths:
         - name: to
           in: query
           required: true
-          description: Конец периода, YYYY-MM-DD
           schema:
             type: string
             format: date
@@ -545,25 +677,63 @@ components:
       type: object
       required:
         - timezone
+        - bufferMinutes
         - rules
+        - exceptions
       properties:
         timezone:
           type: string
           description: Часовой пояс владельца, IANA-идентификатор (например, Europe/Moscow)
+        bufferMinutes:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 120
+          description: |-
+            Буфер до и после каждой активной встречи (минуты, кратно 15).
+            В это время новые слоты не предлагаются.
         rules:
           type: array
           items:
             $ref: '#/components/schemas/AvailabilityRule'
-      description: 'Настройки доступности владельца: часовой пояс + набор недельных правил'
+        exceptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailabilityException'
+          description: Праздники, отпуска и разовые переопределения дней
+      description: Настройки доступности владельца
       example:
         timezone: Europe/Moscow
+        bufferMinutes: 15
         rules:
           - weekday: 1
             startTime: '10:00'
+            endTime: '13:00'
+          - weekday: 1
+            startTime: '14:00'
             endTime: '18:00'
-          - weekday: 3
-            startTime: '10:00'
-            endTime: '14:00'
+        exceptions:
+          - date: '2026-01-01'
+            intervals: []
+    AvailabilityException:
+      type: object
+      required:
+        - date
+        - intervals
+      properties:
+        date:
+          type: string
+          format: date
+          description: Дата YYYY-MM-DD в календаре владельца
+        intervals:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayInterval'
+          description: Рабочие интервалы в этот день; [] = выходной
+      description: |-
+        Исключение из недельного расписания на конкретную дату
+        (праздник, отпуск, особый день приёма).
+        Пустой `intervals` — день полностью недоступен.
     AvailabilityRule:
       type: object
       required:
@@ -588,6 +758,7 @@ components:
       description: |-
         Правило доступности: повторяющийся недельный интервал,
         в котором владелец готов принимать звонки (например, Пн 10:00–18:00).
+        Перерыв внутри дня = два непересекающихся правила в один weekday.
     Booking:
       type: object
       required:
@@ -625,7 +796,7 @@ components:
         createdAt:
           type: string
           format: date-time
-      description: 'Бронирование: гость занял конкретный слот под конкретный тип события'
+      description: Бронирование для владельца (без секретного токена гостя)
       example:
         id: 1
         eventTypeId: 1
@@ -660,6 +831,58 @@ components:
         comment:
           type: string
       description: Данные для создания бронирования гостем
+    BookingCreated:
+      type: object
+      required:
+        - id
+        - eventTypeId
+        - startsAt
+        - endsAt
+        - guestName
+        - guestEmail
+        - status
+        - createdAt
+        - manageToken
+      properties:
+        id:
+          type: integer
+          format: int32
+        eventTypeId:
+          type: integer
+          format: int32
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        guestName:
+          type: string
+        guestEmail:
+          type: string
+          format: email
+        comment:
+          type: string
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        createdAt:
+          type: string
+          format: date-time
+        manageToken:
+          type: string
+          description: Секретный токен управления встречей гостем
+      description: |-
+        Ответ при создании брони: обычные поля + секретный токен
+        для отмены/переноса гостем (ссылка /b/{manageToken}).
+    BookingReschedule:
+      type: object
+      required:
+        - startsAt
+      properties:
+        startsAt:
+          type: string
+          format: date-time
+      description: Перенос встречи гостем на другой свободный слот того же типа
     BookingStatus:
       type: string
       enum:
@@ -678,6 +901,19 @@ components:
         message:
           type: string
       description: '409 — конфликт: слот уже занят или находится в прошлом'
+    DayInterval:
+      type: object
+      required:
+        - startTime
+        - endTime
+      properties:
+        startTime:
+          type: string
+          pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+        endTime:
+          type: string
+          pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+      description: Интервал времени в пределах одного календарного дня (локальное время владельца)
     EventType:
       type: object
       required:
@@ -734,6 +970,51 @@ components:
         message:
           type: string
       description: Ошибка одного поля при валидации
+    GuestBooking:
+      type: object
+      required:
+        - id
+        - eventTypeName
+        - durationMinutes
+        - ownerName
+        - ownerSlug
+        - ownerTimezone
+        - startsAt
+        - endsAt
+        - guestName
+        - guestEmail
+        - status
+      properties:
+        id:
+          type: integer
+          format: int32
+        eventTypeName:
+          type: string
+        durationMinutes:
+          type: integer
+          format: int32
+        ownerName:
+          type: string
+        ownerSlug:
+          type: string
+        ownerTimezone:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        guestName:
+          type: string
+        guestEmail:
+          type: string
+          format: email
+        comment:
+          type: string
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+      description: Карточка встречи для гостя по секретному токену
     NotFoundError:
       type: object
       required:
@@ -747,6 +1028,27 @@ components:
         message:
           type: string
       description: 404 — ресурс не найден
+    NotificationSettings:
+      type: object
+      required:
+        - emailEnabled
+        - reminderHoursBefore
+      properties:
+        emailEnabled:
+          type: boolean
+          description: Письма о новых / отменённых / перенесённых встречах и напоминания
+        telegramChatId:
+          type: string
+          description: |-
+            Chat id Telegram для уведомлений владельцу.
+            Пустая строка / отсутствие — Telegram выключен.
+        reminderHoursBefore:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 168
+          description: За сколько часов до встречи слать напоминание гостю и владельцу (1–168)
+      description: Настройки уведомлений владельца
     Owner:
       type: object
       required:

@@ -11,11 +11,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Текущие настройки доступности */
         get: operations["AvailabilityRoutes_getAvailability"];
         /**
          * @description Полная замена настроек доступности.
-         *     Интервалы каждого правила должны быть кратны 15 минутам и не пересекаться в рамках дня.
+         *     Правила и интервалы исключений кратны 15 минутам и не пересекаются в рамках дня.
+         *     Перерыв = два правила в один weekday с разрывом между ними.
          */
         put: operations["AvailabilityRoutes_updateAvailability"];
         post?: never;
@@ -32,7 +32,6 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Владелец смотрит список предстоящих встреч (только активные, от текущего момента) */
         get: operations["OwnerBookingRoutes_list"];
         put?: never;
         post?: never;
@@ -52,7 +51,6 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Владелец отменяет встречу (перевод в статус cancelled, слот снова свободен) */
         delete: operations["OwnerBookingRoutes_cancel"];
         options?: never;
         head?: never;
@@ -66,10 +64,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Список своих типов событий */
         get: operations["OwnerEventTypeRoutes_list"];
         put?: never;
-        /** @description Создать тип события */
         post: operations["OwnerEventTypeRoutes_create"];
         delete?: never;
         options?: never;
@@ -85,11 +81,47 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Обновить тип события */
         put: operations["OwnerEventTypeRoutes_update"];
         post?: never;
-        /** @description Удалить тип события (если нет активных будущих броней) */
         delete: operations["OwnerEventTypeRoutes_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guest/bookings/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Карточка встречи по секретной ссылке */
+        get: operations["GuestBookingRoutes_get"];
+        put?: never;
+        post?: never;
+        /** @description Отмена встречи гостем */
+        delete: operations["GuestBookingRoutes_cancel"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Перенос на другой свободный слот того же типа события.
+         *     409 — новый слот недоступен.
+         */
+        patch: operations["GuestBookingRoutes_reschedule"];
+        trace?: never;
+    };
+    "/api/notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["NotificationSettingsRoutes_get"];
+        put: operations["NotificationSettingsRoutes_update"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -143,9 +175,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * @description Гость создаёт бронирование на свободный слот владельца.
-         *     409 — слот занят (пересечение с другой бронью), в прошлом, вне расписания
-         *     или дальше горизонта бронирования (14 дней).
+         * @description Гость создаёт бронирование. В ответе — manageToken для отмены/переноса.
+         *     409 — слот занят с учётом буфера, в прошлом, вне расписания или за горизонтом.
          */
         post: operations["PublicRoutes_createBooking"];
         delete?: never;
@@ -180,8 +211,8 @@ export interface paths {
         };
         /**
          * @description Свободные слоты за период [from, to] для выбранного типа события.
+         *     Учитываются буфер между встречами и исключения (праздники/отпуск).
          *     Длина слота = durationMinutes типа. Горизонт — 14 дней включая сегодня.
-         *     Даты from/to интерпретируются в таймзоне владельца.
          */
         get: operations["PublicRoutes_listSlots"];
         put?: never;
@@ -222,19 +253,26 @@ export interface components {
             message: string;
         };
         /**
-         * @description Настройки доступности владельца: часовой пояс + набор недельных правил
+         * @description Настройки доступности владельца
          * @example {
          *       "timezone": "Europe/Moscow",
+         *       "bufferMinutes": 15,
          *       "rules": [
          *         {
          *           "weekday": 1,
          *           "startTime": "10:00",
-         *           "endTime": "18:00"
+         *           "endTime": "13:00"
          *         },
          *         {
-         *           "weekday": 3,
-         *           "startTime": "10:00",
-         *           "endTime": "14:00"
+         *           "weekday": 1,
+         *           "startTime": "14:00",
+         *           "endTime": "18:00"
+         *         }
+         *       ],
+         *       "exceptions": [
+         *         {
+         *           "date": "2026-01-01",
+         *           "intervals": []
          *         }
          *       ]
          *     }
@@ -242,11 +280,34 @@ export interface components {
         Availability: {
             /** @description Часовой пояс владельца, IANA-идентификатор (например, Europe/Moscow) */
             timezone: string;
+            /**
+             * Format: int32
+             * @description Буфер до и после каждой активной встречи (минуты, кратно 15).
+             *     В это время новые слоты не предлагаются.
+             */
+            bufferMinutes: number;
             rules: components["schemas"]["AvailabilityRule"][];
+            /** @description Праздники, отпуска и разовые переопределения дней */
+            exceptions: components["schemas"]["AvailabilityException"][];
+        };
+        /**
+         * @description Исключение из недельного расписания на конкретную дату
+         *     (праздник, отпуск, особый день приёма).
+         *     Пустой `intervals` — день полностью недоступен.
+         */
+        AvailabilityException: {
+            /**
+             * Format: date
+             * @description Дата YYYY-MM-DD в календаре владельца
+             */
+            date: string;
+            /** @description Рабочие интервалы в этот день; [] = выходной */
+            intervals: components["schemas"]["DayInterval"][];
         };
         /**
          * @description Правило доступности: повторяющийся недельный интервал,
          *     в котором владелец готов принимать звонки (например, Пн 10:00–18:00).
+         *     Перерыв внутри дня = два непересекающихся правила в один weekday.
          */
         AvailabilityRule: {
             /**
@@ -260,7 +321,7 @@ export interface components {
             endTime: string;
         };
         /**
-         * @description Бронирование: гость занял конкретный слот под конкретный тип события
+         * @description Бронирование для владельца (без секретного токена гостя)
          * @example {
          *       "id": 1,
          *       "eventTypeId": 1,
@@ -305,6 +366,34 @@ export interface components {
             guestEmail: string;
             comment?: string;
         };
+        /**
+         * @description Ответ при создании брони: обычные поля + секретный токен
+         *     для отмены/переноса гостем (ссылка /b/{manageToken}).
+         */
+        BookingCreated: {
+            /** Format: int32 */
+            id: number;
+            /** Format: int32 */
+            eventTypeId: number;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            guestName: string;
+            /** Format: email */
+            guestEmail: string;
+            comment?: string;
+            status: components["schemas"]["BookingStatus"];
+            /** Format: date-time */
+            createdAt: string;
+            /** @description Секретный токен управления встречей гостем */
+            manageToken: string;
+        };
+        /** @description Перенос встречи гостем на другой свободный слот того же типа */
+        BookingReschedule: {
+            /** Format: date-time */
+            startsAt: string;
+        };
         /** @enum {string} */
         BookingStatus: "active" | "cancelled";
         /** @description 409 — конфликт: слот уже занят или находится в прошлом */
@@ -312,6 +401,11 @@ export interface components {
             /** @enum {string} */
             code: "slot_unavailable";
             message: string;
+        };
+        /** @description Интервал времени в пределах одного календарного дня (локальное время владельца) */
+        DayInterval: {
+            startTime: string;
+            endTime: string;
         };
         /**
          * @description Тип события — то, на что гость записывается (например, «Вводный звонок»)
@@ -346,11 +440,46 @@ export interface components {
             field: string;
             message: string;
         };
+        /** @description Карточка встречи для гостя по секретному токену */
+        GuestBooking: {
+            /** Format: int32 */
+            id: number;
+            eventTypeName: string;
+            /** Format: int32 */
+            durationMinutes: number;
+            ownerName: string;
+            ownerSlug: string;
+            ownerTimezone: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            guestName: string;
+            /** Format: email */
+            guestEmail: string;
+            comment?: string;
+            status: components["schemas"]["BookingStatus"];
+        };
         /** @description 404 — ресурс не найден */
         NotFoundError: {
             /** @enum {string} */
             code: "not_found";
             message: string;
+        };
+        /** @description Настройки уведомлений владельца */
+        NotificationSettings: {
+            /** @description Письма о новых / отменённых / перенесённых встречах и напоминания */
+            emailEnabled: boolean;
+            /**
+             * @description Chat id Telegram для уведомлений владельцу.
+             *     Пустая строка / отсутствие — Telegram выключен.
+             */
+            telegramChatId?: string;
+            /**
+             * Format: int32
+             * @description За сколько часов до встречи слать напоминание гостю и владельцу (1–168)
+             */
+            reminderHoursBefore: number;
         };
         /**
          * @description Владелец календаря. Создаётся через регистрацию; публичная страница —
@@ -761,6 +890,190 @@ export interface operations {
             };
         };
     };
+    GuestBookingRoutes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestBooking"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    GuestBookingRoutes_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description There is no content to send for this request, but the headers may be useful. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    GuestBookingRoutes_reschedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingReschedule"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestBooking"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 409 — конфликт: слот уже занят или находится в прошлом */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    NotificationSettingsRoutes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+        };
+    };
+    NotificationSettingsRoutes_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationSettings"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
     OwnerRoutes_register: {
         parameters: {
             query?: never;
@@ -855,7 +1168,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Booking"];
+                    "application/json": components["schemas"]["BookingCreated"];
                 };
             };
             /** @description 404 — ресурс не найден */
@@ -921,11 +1234,8 @@ export interface operations {
     PublicRoutes_listSlots: {
         parameters: {
             query: {
-                /** @description Тип события: определяет длительность слота */
                 eventTypeId: number;
-                /** @description Начало периода, YYYY-MM-DD */
                 from: string;
-                /** @description Конец периода, YYYY-MM-DD */
                 to: string;
             };
             header?: never;

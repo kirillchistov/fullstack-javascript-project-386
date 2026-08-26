@@ -19,6 +19,6 @@ using Http;
  *   смотрит и отменяет предстоящие встречи.
  */
 @service(#{ title: "Call Calendar API" })
-@OpenAPI.info(#{ version: "0.2.0" })
+@OpenAPI.info(#{ version: "0.3.0" })
 @server("http://localhost:5001", "Локальный сервер разработки")
 namespace CallCalendar;

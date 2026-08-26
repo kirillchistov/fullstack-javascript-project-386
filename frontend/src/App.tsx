@@ -9,6 +9,8 @@ import RegisterPage from './pages/RegisterPage';
 import OwnerBookingsPage from './pages/OwnerBookingsPage';
 import AvailabilityPage from './pages/AvailabilityPage';
 import EventTypesPage from './pages/EventTypesPage';
+import ManageBookingPage from './pages/ManageBookingPage';
+import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import type { ReactNode } from 'react';
 
 function RequireOwner({ children }: { children: ReactNode }) {
@@ -78,6 +80,14 @@ export default function App() {
                   >
                     Доступность
                   </Button>
+                  <Button
+                    component={Link}
+                    to="/admin/notifications"
+                    variant="subtle"
+                    size="compact-sm"
+                  >
+                    Уведомления
+                  </Button>
                 </>
               )}
             </Group>
@@ -118,6 +128,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/u/:slug" element={<BookingPage />} />
+            <Route path="/b/:token" element={<ManageBookingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route
@@ -141,6 +152,14 @@ export default function App() {
               element={
                 <RequireOwner>
                   <AvailabilityPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="/admin/notifications"
+              element={
+                <RequireOwner>
+                  <NotificationSettingsPage />
                 </RequireOwner>
               }
             />

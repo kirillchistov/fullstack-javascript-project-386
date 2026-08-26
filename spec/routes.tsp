@@ -83,35 +83,53 @@ namespace PublicRoutes {
 
   /**
    * Свободные слоты за период [from, to] для выбранного типа события.
+   * Учитываются буфер между встречами и исключения (праздники/отпуск).
    * Длина слота = durationMinutes типа. Горизонт — 14 дней включая сегодня.
-   * Даты from/to интерпретируются в таймзоне владельца.
    */
   @get
   @route("/slots")
   op listSlots(
     @path slug: string,
-
-    /** Тип события: определяет длительность слота */
     @query eventTypeId: int32,
-
-    /** Начало периода, YYYY-MM-DD */
     @query from: plainDate,
-
-    /** Конец периода, YYYY-MM-DD */
     @query to: plainDate,
   ): Slot[] | NotFoundError | ValidationError;
 
   /**
-   * Гость создаёт бронирование на свободный слот владельца.
-   * 409 — слот занят (пересечение с другой бронью), в прошлом, вне расписания
-   * или дальше горизонта бронирования (14 дней).
+   * Гость создаёт бронирование. В ответе — manageToken для отмены/переноса.
+   * 409 — слот занят с учётом буфера, в прошлом, вне расписания или за горизонтом.
    */
   @post
   @route("/bookings")
   op createBooking(@path slug: string, @body booking: BookingCreate): {
     @statusCode statusCode: 201;
-    @body booking: Booking;
+    @body booking: BookingCreated;
   } | NotFoundError | ConflictError | ValidationError;
+}
+
+// ---------------------------------------------------------------------------
+// Управление встречей гостем по секретному токену
+// ---------------------------------------------------------------------------
+
+@tag("Guest")
+@route("/api/guest/bookings/{token}")
+namespace GuestBookingRoutes {
+  /** Карточка встречи по секретной ссылке */
+  @get
+  op get(@path token: string): GuestBooking | NotFoundError;
+
+  /** Отмена встречи гостем */
+  @delete
+  op cancel(@path token: string): {
+    @statusCode statusCode: 204;
+  } | NotFoundError;
+
+  /**
+   * Перенос на другой свободный слот того же типа события.
+   * 409 — новый слот недоступен.
+   */
+  @patch
+  op reschedule(@path token: string, @body body: BookingReschedule): GuestBooking | NotFoundError | ConflictError | ValidationError;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,23 +140,19 @@ namespace PublicRoutes {
 @route("/api/event-types")
 @useAuth(OwnerSession)
 namespace OwnerEventTypeRoutes {
-  /** Список своих типов событий */
   @get
   op list(): EventType[] | UnauthorizedError;
 
-  /** Создать тип события */
   @post
   op create(@body body: EventTypeWrite): {
     @statusCode statusCode: 201;
     @body eventType: EventType;
   } | UnauthorizedError | ValidationError;
 
-  /** Обновить тип события */
   @put
   @route("/{id}")
   op update(@path id: int32, @body body: EventTypeWrite): EventType | UnauthorizedError | NotFoundError | ValidationError;
 
-  /** Удалить тип события (если нет активных будущих броней) */
   @delete
   @route("/{id}")
   op remove(@path id: int32): {
@@ -154,11 +168,9 @@ namespace OwnerEventTypeRoutes {
 @route("/api/bookings")
 @useAuth(OwnerSession)
 namespace OwnerBookingRoutes {
-  /** Владелец смотрит список предстоящих встреч (только активные, от текущего момента) */
   @get
   op list(): Booking[] | UnauthorizedError;
 
-  /** Владелец отменяет встречу (перевод в статус cancelled, слот снова свободен) */
   @delete
   @route("/{id}")
   op cancel(@path id: int32): {
@@ -174,14 +186,29 @@ namespace OwnerBookingRoutes {
 @route("/api/availability")
 @useAuth(OwnerSession)
 namespace AvailabilityRoutes {
-  /** Текущие настройки доступности */
   @get
   op getAvailability(): Availability | UnauthorizedError;
 
   /**
    * Полная замена настроек доступности.
-   * Интервалы каждого правила должны быть кратны 15 минутам и не пересекаться в рамках дня.
+   * Правила и интервалы исключений кратны 15 минутам и не пересекаются в рамках дня.
+   * Перерыв = два правила в один weekday с разрывом между ними.
    */
   @put
   op updateAvailability(@body availability: Availability): Availability | UnauthorizedError | ValidationError;
+}
+
+// ---------------------------------------------------------------------------
+// Уведомления владельца
+// ---------------------------------------------------------------------------
+
+@tag("Owner")
+@route("/api/notification-settings")
+@useAuth(OwnerSession)
+namespace NotificationSettingsRoutes {
+  @get
+  op get(): NotificationSettings | UnauthorizedError;
+
+  @put
+  op update(@body body: NotificationSettings): NotificationSettings | UnauthorizedError | ValidationError;
 }

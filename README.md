@@ -48,6 +48,8 @@ npm run dev
 
 Публичная страница сидового владельца: [/u/kirill](http://localhost:5173/u/kirill). Регистрация — `/register`. Вход по умолчанию: `owner@example.com` / `secret` (переменные `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NAME` / `OWNER_SLUG` / `OWNER_TIMEZONE`). Данные в SQLite (`DATABASE_PATH`, по умолчанию `backend/data/call-calendar.sqlite`).
 
+Уведомления (опционально): `SMTP_URL` и `EMAIL_FROM` для почты, `TELEGRAM_BOT_TOKEN` для Telegram владельцу, `PUBLIC_BASE_URL` — база ссылок в письмах (по умолчанию `http://localhost:5173`). Без SMTP/токена сообщения пишутся в лог сервера (dry-run).
+
 Вместо бэкенда можно поднять мок API из контракта (Prism) — удобно при работе только над фронтендом:
 
 ```bash

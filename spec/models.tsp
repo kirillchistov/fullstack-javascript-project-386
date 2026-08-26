@@ -104,6 +104,7 @@ model EventTypeWrite {
 /**
  * Правило доступности: повторяющийся недельный интервал,
  * в котором владелец готов принимать звонки (например, Пн 10:00–18:00).
+ * Перерыв внутри дня = два непересекающихся правила в один weekday.
  */
 model AvailabilityRule {
   /** День недели по ISO 8601: 1 — понедельник … 7 — воскресенье */
@@ -120,19 +121,56 @@ model AvailabilityRule {
   endTime: string;
 }
 
-/** Настройки доступности владельца: часовой пояс + набор недельных правил */
+/** Интервал времени в пределах одного календарного дня (локальное время владельца) */
+model DayInterval {
+  @pattern("^([01][0-9]|2[0-3]):[0-5][0-9]$")
+  startTime: string;
+
+  @pattern("^([01][0-9]|2[0-3]):[0-5][0-9]$")
+  endTime: string;
+}
+
+/**
+ * Исключение из недельного расписания на конкретную дату
+ * (праздник, отпуск, особый день приёма).
+ * Пустой `intervals` — день полностью недоступен.
+ */
+model AvailabilityException {
+  /** Дата YYYY-MM-DD в календаре владельца */
+  date: plainDate;
+
+  /** Рабочие интервалы в этот день; [] = выходной */
+  intervals: DayInterval[];
+}
+
+/** Настройки доступности владельца */
 @example(#{
   timezone: "Europe/Moscow",
+  bufferMinutes: 15,
   rules: #[
-    #{ weekday: 1, startTime: "10:00", endTime: "18:00" },
-    #{ weekday: 3, startTime: "10:00", endTime: "14:00" }
+    #{ weekday: 1, startTime: "10:00", endTime: "13:00" },
+    #{ weekday: 1, startTime: "14:00", endTime: "18:00" }
+  ],
+  exceptions: #[
+    #{ date: plainDate.fromISO("2026-01-01"), intervals: #[] }
   ],
 })
 model Availability {
   /** Часовой пояс владельца, IANA-идентификатор (например, Europe/Moscow) */
   timezone: string;
 
+  /**
+   * Буфер до и после каждой активной встречи (минуты, кратно 15).
+   * В это время новые слоты не предлагаются.
+   */
+  @minValue(0)
+  @maxValue(120)
+  bufferMinutes: int32;
+
   rules: AvailabilityRule[];
+
+  /** Праздники, отпуска и разовые переопределения дней */
+  exceptions: AvailabilityException[];
 }
 
 /**
@@ -156,7 +194,7 @@ enum BookingStatus {
   cancelled,
 }
 
-/** Бронирование: гость занял конкретный слот под конкретный тип события */
+/** Бронирование для владельца (без секретного токена гостя) */
 @example(#{
   id: 1,
   eventTypeId: 1,
@@ -190,6 +228,47 @@ model Booking {
   createdAt: utcDateTime;
 }
 
+/**
+ * Ответ при создании брони: обычные поля + секретный токен
+ * для отмены/переноса гостем (ссылка /b/{manageToken}).
+ */
+model BookingCreated {
+  id: int32;
+  eventTypeId: int32;
+  startsAt: utcDateTime;
+  endsAt: utcDateTime;
+  guestName: string;
+
+  @format("email")
+  guestEmail: string;
+
+  comment?: string;
+  status: BookingStatus;
+  createdAt: utcDateTime;
+
+  /** Секретный токен управления встречей гостем */
+  manageToken: string;
+}
+
+/** Карточка встречи для гостя по секретному токену */
+model GuestBooking {
+  id: int32;
+  eventTypeName: string;
+  durationMinutes: int32;
+  ownerName: string;
+  ownerSlug: string;
+  ownerTimezone: string;
+  startsAt: utcDateTime;
+  endsAt: utcDateTime;
+  guestName: string;
+
+  @format("email")
+  guestEmail: string;
+
+  comment?: string;
+  status: BookingStatus;
+}
+
 /** Данные для создания бронирования гостем */
 model BookingCreate {
   eventTypeId: int32;
@@ -204,6 +283,28 @@ model BookingCreate {
   guestEmail: string;
 
   comment?: string;
+}
+
+/** Перенос встречи гостем на другой свободный слот того же типа */
+model BookingReschedule {
+  startsAt: utcDateTime;
+}
+
+/** Настройки уведомлений владельца */
+model NotificationSettings {
+  /** Письма о новых / отменённых / перенесённых встречах и напоминания */
+  emailEnabled: boolean;
+
+  /**
+   * Chat id Telegram для уведомлений владельцу.
+   * Пустая строка / отсутствие — Telegram выключен.
+   */
+  telegramChatId?: string;
+
+  /** За сколько часов до встречи слать напоминание гостю и владельцу (1–168) */
+  @minValue(1)
+  @maxValue(168)
+  reminderHoursBefore: int32;
 }
 
 // ---------------------------------------------------------------------------

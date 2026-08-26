@@ -318,6 +318,8 @@ test('доступность: чтение и обновление, пересе
   const current = await app.inject({ method: 'GET', url: '/api/availability', ...auth });
   assert.equal(current.statusCode, 200);
   assert.equal(current.json().timezone, TZ);
+  assert.equal(current.json().bufferMinutes, 0);
+  assert.deepEqual(current.json().exceptions, []);
 
   const overlapping = await app.inject({
     method: 'PUT',
@@ -325,6 +327,8 @@ test('доступность: чтение и обновление, пересе
     ...auth,
     payload: {
       timezone: TZ,
+      bufferMinutes: 0,
+      exceptions: [],
       rules: [
         { weekday: 1, startTime: '10:00', endTime: '14:00' },
         { weekday: 1, startTime: '13:00', endTime: '18:00' },
@@ -332,4 +336,159 @@ test('доступность: чтение и обновление, пересе
     },
   });
   assert.equal(overlapping.statusCode, 422);
+});
+
+test('доступность: перерыв, буфер и праздник влияют на слоты', async () => {
+  const app = build();
+  const auth = await login(app);
+  const day = nextWorkday();
+
+  const weekday = ((dayjs.tz(day, TZ).day() + 6) % 7) + 1;
+
+  await app.inject({
+    method: 'PUT',
+    url: '/api/availability',
+    ...auth,
+    payload: {
+      timezone: TZ,
+      bufferMinutes: 30,
+      rules: [
+        { weekday, startTime: '10:00', endTime: '13:00' },
+        { weekday, startTime: '14:00', endTime: '18:00' },
+      ],
+      exceptions: [{ date: day, intervals: [] }],
+    },
+  });
+
+  const types = (
+    await app.inject({ method: 'GET', url: `/api/public/${SLUG}/event-types` })
+  ).json();
+  const et = types.find((t) => t.durationMinutes === 30);
+  const holidaySlots = await app.inject({
+    method: 'GET',
+    url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${et.id}`,
+  });
+  assert.deepEqual(holidaySlots.json(), []);
+
+  // Снимаем праздник, оставляем перерыв и буфер
+  await app.inject({
+    method: 'PUT',
+    url: '/api/availability',
+    ...auth,
+    payload: {
+      timezone: TZ,
+      bufferMinutes: 30,
+      rules: [
+        { weekday, startTime: '10:00', endTime: '13:00' },
+        { weekday, startTime: '14:00', endTime: '18:00' },
+      ],
+      exceptions: [],
+    },
+  });
+
+  const slots = (
+    await app.inject({
+      method: 'GET',
+      url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${et.id}`,
+    })
+  ).json();
+  // 10–13 → 6 слотов, 14–18 → 8 слотов
+  assert.equal(slots.length, 14);
+
+  const first = slots[0];
+  await app.inject({
+    method: 'POST',
+    url: `/api/public/${SLUG}/bookings`,
+    payload: {
+      eventTypeId: et.id,
+      startsAt: first.startsAt,
+      guestName: 'Иван',
+      guestEmail: 'ivan@example.com',
+    },
+  });
+  const after = (
+    await app.inject({
+      method: 'GET',
+      url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${et.id}`,
+    })
+  ).json();
+  // Буфер 30 мин блокирует и соседний слот после встречи
+  assert.ok(!after.some((s) => s.startsAt === first.startsAt));
+  assert.ok(!after.some((s) => s.startsAt === slots[1].startsAt));
+});
+
+test('гость: отмена и перенос по manageToken', async () => {
+  const app = build();
+  const day = nextWorkday();
+  const types = (
+    await app.inject({ method: 'GET', url: `/api/public/${SLUG}/event-types` })
+  ).json();
+  const et = types[0];
+  const slots = (
+    await app.inject({
+      method: 'GET',
+      url: `/api/public/${SLUG}/slots?from=${day}&to=${day}&eventTypeId=${et.id}`,
+    })
+  ).json();
+
+  const created = await app.inject({
+    method: 'POST',
+    url: `/api/public/${SLUG}/bookings`,
+    payload: {
+      eventTypeId: et.id,
+      startsAt: slots[0].startsAt,
+      guestName: 'Иван',
+      guestEmail: 'ivan@example.com',
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const token = created.json().manageToken;
+  assert.ok(token);
+
+  const view = await app.inject({ method: 'GET', url: `/api/guest/bookings/${token}` });
+  assert.equal(view.statusCode, 200);
+  assert.equal(view.json().guestEmail, 'ivan@example.com');
+
+  const moved = await app.inject({
+    method: 'PATCH',
+    url: `/api/guest/bookings/${token}`,
+    payload: { startsAt: slots[2].startsAt },
+  });
+  assert.equal(moved.statusCode, 200);
+  assert.equal(moved.json().startsAt, slots[2].startsAt);
+
+  const cancelled = await app.inject({
+    method: 'DELETE',
+    url: `/api/guest/bookings/${token}`,
+  });
+  assert.equal(cancelled.statusCode, 204);
+
+  const gone = await app.inject({ method: 'GET', url: `/api/guest/bookings/${token}` });
+  assert.equal(gone.json().status, 'cancelled');
+});
+
+test('уведомления: чтение и сохранение настроек', async () => {
+  const app = build();
+  const auth = await login(app);
+  const current = await app.inject({
+    method: 'GET',
+    url: '/api/notification-settings',
+    ...auth,
+  });
+  assert.equal(current.statusCode, 200);
+  assert.equal(current.json().emailEnabled, true);
+
+  const updated = await app.inject({
+    method: 'PUT',
+    url: '/api/notification-settings',
+    ...auth,
+    payload: {
+      emailEnabled: true,
+      telegramChatId: '12345',
+      reminderHoursBefore: 12,
+    },
+  });
+  assert.equal(updated.statusCode, 200);
+  assert.equal(updated.json().telegramChatId, '12345');
+  assert.equal(updated.json().reminderHoursBefore, 12);
 });

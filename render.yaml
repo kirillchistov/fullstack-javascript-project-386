@@ -22,3 +22,9 @@ services:
         value: Europe/Moscow
       - key: DATABASE_PATH
         value: /app/data/call-calendar.sqlite
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: SMTP_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false

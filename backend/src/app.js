@@ -14,8 +14,42 @@ import {
   validateAvailability,
   validateDurationMinutes,
 } from './slots.js';
+import { notifyBookingEvent } from './notifications.js';
 
 const SESSION_COOKIE = 'session';
+
+function publicGuestBooking(view) {
+  if (!view) return null;
+  const {
+    _ownerId: _o,
+    _eventTypeId: _e,
+    _manageToken: _t,
+    ...rest
+  } = view;
+  return rest;
+}
+
+async function notifyForOwnerBooking(store, owner, bookingRow, kind) {
+  const eventType = store.findEventType(owner.id, bookingRow.eventTypeId ?? bookingRow.event_type_id);
+  if (!eventType) return;
+  const availability = store.getAvailability(owner.id);
+  const settings = store.getNotificationSettings(owner.id);
+  await notifyBookingEvent({
+    kind,
+    booking: {
+      startsAt: bookingRow.startsAt ?? bookingRow.starts_at,
+      endsAt: bookingRow.endsAt ?? bookingRow.ends_at,
+      guestName: bookingRow.guestName ?? bookingRow.guest_name,
+      guestEmail: bookingRow.guestEmail ?? bookingRow.guest_email,
+      comment: bookingRow.comment,
+      manageToken: bookingRow.manageToken ?? bookingRow.manage_token,
+    },
+    owner,
+    eventType,
+    availability,
+    settings,
+  });
+}
 
 /**
  * @param {{ logger?: boolean | object, databasePath?: string }} [options]
@@ -212,7 +246,7 @@ export function buildApp({ logger = false, databasePath } = {}) {
   app.post(
     '/api/public/:slug/bookings',
     { schema: { body: ref('BookingCreate') } },
-    (request, reply) => {
+    async (request, reply) => {
       const owner = store.findOwnerBySlug(request.params.slug);
       if (!owner) {
         return reply.code(404).send({ code: 'not_found', message: 'Владелец не найден' });
@@ -249,7 +283,91 @@ export function buildApp({ logger = false, databasePath } = {}) {
         guestEmail,
         ...(comment !== undefined && { comment }),
       });
+      await notifyForOwnerBooking(store, owner, booking, 'created');
       return reply.code(201).send(booking);
+    },
+  );
+
+  // --- Гость: управление по секретному токену -----------------------------
+
+  app.get('/api/guest/bookings/:token', (request, reply) => {
+    const view = store.getGuestBooking(request.params.token);
+    if (!view) {
+      return reply.code(404).send({ code: 'not_found', message: 'Встреча не найдена' });
+    }
+    return publicGuestBooking(view);
+  });
+
+  app.delete('/api/guest/bookings/:token', async (request, reply) => {
+    const before = store.getGuestBooking(request.params.token);
+    if (!before || before.status !== 'active') {
+      return reply.code(404).send({ code: 'not_found', message: 'Встреча не найдена' });
+    }
+    const cancelled = store.cancelBookingByToken(request.params.token);
+    const owner = store.findOwnerById(before._ownerId);
+    if (owner && cancelled) {
+      await notifyForOwnerBooking(
+        store,
+        owner,
+        {
+          ...cancelled,
+          manageToken: cancelled.manage_token,
+          eventTypeId: cancelled.event_type_id,
+        },
+        'cancelled',
+      );
+    }
+    reply.code(204).send();
+  });
+
+  app.patch(
+    '/api/guest/bookings/:token',
+    { schema: { body: ref('BookingReschedule') } },
+    async (request, reply) => {
+      const current = store.getGuestBooking(request.params.token);
+      if (!current || current.status !== 'active') {
+        return reply.code(404).send({ code: 'not_found', message: 'Встреча не найдена' });
+      }
+      const owner = store.findOwnerById(current._ownerId);
+      const eventType = store.findEventType(current._ownerId, current._eventTypeId);
+      if (!owner || !eventType) {
+        return reply.code(404).send({ code: 'not_found', message: 'Встреча не найдена' });
+      }
+
+      const { startsAt } = request.body;
+      const free = isFreeSlot({
+        availability: store.getAvailability(owner.id),
+        activeBookings: store.getActiveBookingsExcept(owner.id, current.id),
+        startsAt,
+        durationMinutes: eventType.durationMinutes,
+      });
+      if (!free) {
+        return reply.code(409).send({
+          code: 'slot_unavailable',
+          message: 'Слот уже занят, находится в прошлом или вне расписания',
+        });
+      }
+
+      const start = dayjs(startsAt);
+      const updated = store.rescheduleBookingByToken(request.params.token, {
+        startsAt: start.toISOString(),
+        endsAt: start.add(eventType.durationMinutes, 'minute').toISOString(),
+      });
+      await notifyForOwnerBooking(
+        store,
+        owner,
+        {
+          startsAt: updated.startsAt,
+          endsAt: updated.endsAt,
+          guestName: updated.guestName,
+          guestEmail: updated.guestEmail,
+          comment: updated.comment,
+          manageToken: updated._manageToken,
+          eventTypeId: current._eventTypeId,
+        },
+        'rescheduled',
+      );
+      return publicGuestBooking(updated);
     },
   );
 
@@ -359,11 +477,12 @@ export function buildApp({ logger = false, databasePath } = {}) {
         },
       },
     },
-    (request, reply) => {
-      const ok = store.cancelBooking(request.owner.id, request.params.id);
-      if (!ok) {
+    async (request, reply) => {
+      const cancelled = store.cancelBooking(request.owner.id, request.params.id);
+      if (!cancelled) {
         return reply.code(404).send({ code: 'not_found', message: 'Встреча не найдена' });
       }
+      await notifyForOwnerBooking(store, request.owner, cancelled, 'cancelled');
       reply.code(204).send();
     },
   );
@@ -387,6 +506,32 @@ export function buildApp({ logger = false, databasePath } = {}) {
         });
       }
       return store.setAvailability(request.owner.id, request.body);
+    },
+  );
+
+  // --- Уведомления --------------------------------------------------------
+
+  app.get('/api/notification-settings', { preHandler: requireOwner }, (request) =>
+    store.getNotificationSettings(request.owner.id),
+  );
+
+  app.put(
+    '/api/notification-settings',
+    { preHandler: requireOwner, schema: { body: ref('NotificationSettings') } },
+    (request, reply) => {
+      const { reminderHoursBefore } = request.body;
+      if (
+        !Number.isInteger(reminderHoursBefore) ||
+        reminderHoursBefore < 1 ||
+        reminderHoursBefore > 168
+      ) {
+        return reply.code(422).send({
+          code: 'validation_error',
+          message: 'reminderHoursBefore: целое число от 1 до 168',
+          errors: [{ field: 'reminderHoursBefore', message: '1–168 часов' }],
+        });
+      }
+      return store.setNotificationSettings(request.owner.id, request.body);
     },
   );
 

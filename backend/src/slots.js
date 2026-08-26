@@ -11,18 +11,46 @@ export const GRID_MINUTES = 15;
 /** Горизонт бронирования: слоты доступны на 14 дней вперёд, включая сегодняшний */
 export const BOOKING_HORIZON_DAYS = 14;
 
-/** @deprecated используйте GRID_MINUTES; оставлено для совместимости импортов */
+/** @deprecated используйте GRID_MINUTES */
 export const SLOT_MINUTES = GRID_MINUTES;
 
 function overlaps(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && bStart < aEnd;
 }
 
+function toMinutes(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function normalizeAvailability(availability) {
+  return {
+    timezone: availability.timezone,
+    bufferMinutes: Number.isInteger(availability.bufferMinutes)
+      ? availability.bufferMinutes
+      : 0,
+    rules: availability.rules ?? [],
+    exceptions: availability.exceptions ?? [],
+  };
+}
+
+/** Интервалы работы на календарный день (с учётом исключений) */
+export function intervalsForDay(availability, dayStr) {
+  const { rules, exceptions } = normalizeAvailability(availability);
+  const exception = exceptions.find((e) => e.date === dayStr);
+  if (exception) {
+    return exception.intervals ?? [];
+  }
+  const day = dayjs(dayStr);
+  const isoWeekday = ((day.day() + 6) % 7) + 1;
+  return rules
+    .filter((r) => r.weekday === isoWeekday)
+    .map((r) => ({ startTime: r.startTime, endTime: r.endTime }));
+}
+
 /**
- * Свободные слоты длительностью durationMinutes за период [from, to]
- * (даты в таймзоне владельца). Шаг сетки = durationMinutes.
- * Из кандидатов вычитаются интервалы, пересекающиеся с активными бронями.
- * Период обрезается горизонтом: [сегодня, сегодня + 13 дней] в TZ владельца.
+ * Свободные слоты длительностью durationMinutes.
+ * Учитывает исключения (праздники/особые дни) и буфер вокруг активных броней.
  */
 export function computeFreeSlots({
   availability,
@@ -36,10 +64,13 @@ export function computeFreeSlots({
     return [];
   }
 
-  const { timezone: tz, rules } = availability;
-  const booked = activeBookings.map((b) => ({
-    start: Date.parse(b.startsAt),
-    end: Date.parse(b.endsAt),
+  const avail = normalizeAvailability(availability);
+  const { timezone: tz, bufferMinutes } = avail;
+  const bufferMs = bufferMinutes * 60 * 1000;
+
+  const blocked = activeBookings.map((b) => ({
+    start: Date.parse(b.startsAt) - bufferMs,
+    end: Date.parse(b.endsAt) + bufferMs,
   }));
   const slots = [];
 
@@ -52,16 +83,15 @@ export function computeFreeSlots({
   if (finish.isAfter(horizonEnd, 'day')) finish = horizonEnd;
 
   for (let day = start; !day.isAfter(finish, 'day'); day = day.add(1, 'day')) {
-    const isoWeekday = ((day.day() + 6) % 7) + 1;
-    for (const rule of rules) {
-      if (rule.weekday !== isoWeekday) continue;
-      const dayStr = day.format('YYYY-MM-DD');
-      let cursor = dayjs.tz(`${dayStr}T${rule.startTime}`, tz);
-      const end = dayjs.tz(`${dayStr}T${rule.endTime}`, tz);
+    const dayStr = day.format('YYYY-MM-DD');
+    const intervals = intervalsForDay(avail, dayStr);
+    for (const interval of intervals) {
+      let cursor = dayjs.tz(`${dayStr}T${interval.startTime}`, tz);
+      const end = dayjs.tz(`${dayStr}T${interval.endTime}`, tz);
       while (cursor.add(durationMinutes, 'minute').valueOf() <= end.valueOf()) {
         const slotStart = cursor.valueOf();
         const slotEnd = cursor.add(durationMinutes, 'minute').valueOf();
-        const conflict = booked.some((b) => overlaps(slotStart, slotEnd, b.start, b.end));
+        const conflict = blocked.some((b) => overlaps(slotStart, slotEnd, b.start, b.end));
         if (cursor.isAfter(now) && !conflict) {
           slots.push({
             startsAt: cursor.toISOString(),
@@ -76,7 +106,6 @@ export function computeFreeSlots({
   return slots.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
 
-/** Проверка, что startsAt — свободный слот заданной длительности */
 export function isFreeSlot({
   availability,
   activeBookings,
@@ -87,7 +116,7 @@ export function isFreeSlot({
   const start = dayjs(startsAt);
   if (!start.isValid() || !start.isAfter(now)) return false;
 
-  const dayInOwnerTz = start.tz(availability.timezone).format('YYYY-MM-DD');
+  const dayInOwnerTz = start.tz(normalizeAvailability(availability).timezone).format('YYYY-MM-DD');
   const slots = computeFreeSlots({
     availability,
     activeBookings,
@@ -112,25 +141,71 @@ export function validateDurationMinutes(durationMinutes) {
   return null;
 }
 
+function validateIntervals(intervals, fieldPrefix, errors) {
+  intervals.forEach((interval, i) => {
+    const start = toMinutes(interval.startTime);
+    const end = toMinutes(interval.endTime);
+    if (end <= start) {
+      errors.push({
+        field: `${fieldPrefix}[${i}]`,
+        message: 'Конец интервала должен быть позже начала',
+      });
+    }
+    if ((end - start) % GRID_MINUTES !== 0) {
+      errors.push({
+        field: `${fieldPrefix}[${i}]`,
+        message: `Интервал должен быть кратен ${GRID_MINUTES} минутам`,
+      });
+    }
+  });
+  for (let i = 0; i < intervals.length; i += 1) {
+    for (let j = i + 1; j < intervals.length; j += 1) {
+      const [aStart, aEnd] = [
+        toMinutes(intervals[i].startTime),
+        toMinutes(intervals[i].endTime),
+      ];
+      const [bStart, bEnd] = [
+        toMinutes(intervals[j].startTime),
+        toMinutes(intervals[j].endTime),
+      ];
+      if (aStart < bEnd && bStart < aEnd) {
+        errors.push({
+          field: `${fieldPrefix}[${j}]`,
+          message: `Интервал пересекается с интервалом ${i + 1}`,
+        });
+      }
+    }
+  }
+}
+
 /**
- * Валидация правил доступности (бизнес-правила, не выразимые в JSON Schema).
- * Возвращает список ошибок формата FieldError из контракта.
+ * Валидация правил доступности, буфера и исключений.
  */
-export function validateAvailability({ timezone: tz, rules }) {
+export function validateAvailability(raw) {
+  const availability = normalizeAvailability(raw);
   const errors = [];
 
   try {
-    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    Intl.DateTimeFormat(undefined, { timeZone: availability.timezone });
   } catch {
     errors.push({ field: 'timezone', message: 'Неизвестный IANA-часовой пояс' });
   }
 
-  const toMinutes = (t) => {
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
+  if (
+    !Number.isInteger(availability.bufferMinutes) ||
+    availability.bufferMinutes < 0 ||
+    availability.bufferMinutes > 120 ||
+    availability.bufferMinutes % GRID_MINUTES !== 0
+  ) {
+    errors.push({
+      field: 'bufferMinutes',
+      message: `Буфер: 0–120 минут, кратно ${GRID_MINUTES}`,
+    });
+  }
 
-  rules.forEach((rule, i) => {
+  // Группируем недельные правила по дню и проверяем как интервалы
+  const byWeekday = new Map();
+  availability.rules.forEach((rule, i) => {
     const start = toMinutes(rule.startTime);
     const end = toMinutes(rule.endTime);
     if (end <= start) {
@@ -142,21 +217,42 @@ export function validateAvailability({ timezone: tz, rules }) {
         message: `Интервал должен быть кратен ${GRID_MINUTES} минутам`,
       });
     }
+    if (!byWeekday.has(rule.weekday)) byWeekday.set(rule.weekday, []);
+    byWeekday.get(rule.weekday).push({ ...rule, _index: i });
   });
 
-  for (let i = 0; i < rules.length; i += 1) {
-    for (let j = i + 1; j < rules.length; j += 1) {
-      if (rules[i].weekday !== rules[j].weekday) continue;
-      const [aStart, aEnd] = [toMinutes(rules[i].startTime), toMinutes(rules[i].endTime)];
-      const [bStart, bEnd] = [toMinutes(rules[j].startTime), toMinutes(rules[j].endTime)];
-      if (aStart < bEnd && bStart < aEnd) {
-        errors.push({
-          field: `rules[${j}]`,
-          message: `Интервал пересекается с правилом ${i + 1} в тот же день`,
-        });
+  for (const [, dayRules] of byWeekday) {
+    for (let i = 0; i < dayRules.length; i += 1) {
+      for (let j = i + 1; j < dayRules.length; j += 1) {
+        const [aStart, aEnd] = [
+          toMinutes(dayRules[i].startTime),
+          toMinutes(dayRules[i].endTime),
+        ];
+        const [bStart, bEnd] = [
+          toMinutes(dayRules[j].startTime),
+          toMinutes(dayRules[j].endTime),
+        ];
+        if (aStart < bEnd && bStart < aEnd) {
+          errors.push({
+            field: `rules[${dayRules[j]._index}]`,
+            message: `Интервал пересекается с правилом ${dayRules[i]._index + 1} в тот же день`,
+          });
+        }
       }
     }
   }
+
+  const seenDates = new Set();
+  availability.exceptions.forEach((ex, i) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ex.date) || !dayjs(ex.date).isValid()) {
+      errors.push({ field: `exceptions[${i}].date`, message: 'Ожидается дата YYYY-MM-DD' });
+    }
+    if (seenDates.has(ex.date)) {
+      errors.push({ field: `exceptions[${i}].date`, message: 'Дата исключения уже указана' });
+    }
+    seenDates.add(ex.date);
+    validateIntervals(ex.intervals ?? [], `exceptions[${i}].intervals`, errors);
+  });
 
   return errors;
 }
