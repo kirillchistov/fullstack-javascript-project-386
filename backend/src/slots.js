@@ -50,11 +50,13 @@ export function intervalsForDay(availability, dayStr) {
 
 /**
  * Свободные слоты длительностью durationMinutes.
- * Учитывает исключения (праздники/особые дни) и буфер вокруг активных броней.
+ * Учитывает исключения, буфер вокруг активных броней и внешнюю занятость (календари).
+ * @param {{ startsAt: string, endsAt: string }[]} [externalBusy]
  */
 export function computeFreeSlots({
   availability,
   activeBookings,
+  externalBusy = [],
   from,
   to,
   durationMinutes,
@@ -68,10 +70,16 @@ export function computeFreeSlots({
   const { timezone: tz, bufferMinutes } = avail;
   const bufferMs = bufferMinutes * 60 * 1000;
 
-  const blocked = activeBookings.map((b) => ({
-    start: Date.parse(b.startsAt) - bufferMs,
-    end: Date.parse(b.endsAt) + bufferMs,
-  }));
+  const blocked = [
+    ...activeBookings.map((b) => ({
+      start: Date.parse(b.startsAt) - bufferMs,
+      end: Date.parse(b.endsAt) + bufferMs,
+    })),
+    ...externalBusy.map((b) => ({
+      start: Date.parse(b.startsAt),
+      end: Date.parse(b.endsAt),
+    })),
+  ];
   const slots = [];
 
   const todayInTz = dayjs.tz(now.toISOString(), tz).startOf('day');
@@ -109,6 +117,7 @@ export function computeFreeSlots({
 export function isFreeSlot({
   availability,
   activeBookings,
+  externalBusy = [],
   startsAt,
   durationMinutes,
   now = dayjs(),
@@ -120,6 +129,7 @@ export function isFreeSlot({
   const slots = computeFreeSlots({
     availability,
     activeBookings,
+    externalBusy,
     from: dayInOwnerTz,
     to: dayInOwnerTz,
     durationMinutes,

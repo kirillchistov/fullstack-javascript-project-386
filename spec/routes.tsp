@@ -212,3 +212,149 @@ namespace NotificationSettingsRoutes {
   @put
   op update(@body body: NotificationSettings): NotificationSettings | UnauthorizedError | ValidationError;
 }
+
+// ---------------------------------------------------------------------------
+// P2: календарный sync (Pro)
+// ---------------------------------------------------------------------------
+
+@tag("Owner")
+@route("/api/calendar-connections")
+@useAuth(OwnerSession)
+namespace CalendarConnectionRoutes {
+  @get
+  op list(): CalendarConnection[] | UnauthorizedError | ForbiddenError;
+
+  @post
+  @route("/ics")
+  op connectIcs(@body body: IcsConnectionCreate): {
+    @statusCode statusCode: 201;
+    @body connection: CalendarConnection;
+  } | UnauthorizedError | ForbiddenError | ValidationError;
+
+  /**
+   * Старт Google OAuth. Без GOOGLE_CLIENT_ID — stub authUrl
+   * на /api/calendar-connections/google/stub-connect.
+   */
+  @post
+  @route("/google/start")
+  op startGoogle(): GoogleAuthStart | UnauthorizedError | ForbiddenError;
+
+  @post
+  @route("/{id}/sync")
+  op sync(@path id: int32): CalendarConnection | UnauthorizedError | ForbiddenError | NotFoundError;
+
+  @delete
+  @route("/{id}")
+  op remove(@path id: int32): {
+    @statusCode statusCode: 204;
+  } | UnauthorizedError | ForbiddenError | NotFoundError;
+}
+
+// ---------------------------------------------------------------------------
+// P2: организация / команда (Pro)
+// ---------------------------------------------------------------------------
+
+@tag("Owner")
+@route("/api/organizations")
+@useAuth(OwnerSession)
+namespace OrganizationRoutes {
+  @get
+  op listMine(): Organization[] | UnauthorizedError;
+
+  @post
+  op create(@body body: OrganizationCreate): {
+    @statusCode statusCode: 201;
+    @body org: Organization;
+  } | UnauthorizedError | ForbiddenError | ValidationError;
+
+  @get
+  @route("/{id}/members")
+  op listMembers(@path id: int32): OrganizationMember[] | UnauthorizedError | ForbiddenError | NotFoundError;
+
+  @post
+  @route("/{id}/invites")
+  op invite(
+    @path id: int32,
+    @body body: OrganizationInviteCreate,
+  ): OrganizationInvite | UnauthorizedError | ForbiddenError | NotFoundError | ValidationError;
+
+  @post
+  @route("/join")
+  op join(@body body: OrganizationJoin): Organization | UnauthorizedError | NotFoundError | ValidationError;
+}
+
+// ---------------------------------------------------------------------------
+// P2: серии встреч (Pro)
+// ---------------------------------------------------------------------------
+
+@tag("Owner")
+@route("/api/booking-series")
+@useAuth(OwnerSession)
+namespace BookingSeriesRoutes {
+  @get
+  op list(): BookingSeries[] | UnauthorizedError | ForbiddenError;
+
+  @post
+  op create(@body body: BookingSeriesCreate): {
+    @statusCode statusCode: 201;
+    @body series: BookingSeries;
+  } | UnauthorizedError | ForbiddenError | ValidationError | ConflictError;
+
+  @delete
+  @route("/{id}")
+  op cancel(@path id: int32): {
+    @statusCode statusCode: 204;
+  } | UnauthorizedError | ForbiddenError | NotFoundError;
+}
+
+// ---------------------------------------------------------------------------
+// P2: аналитика (Pro)
+// ---------------------------------------------------------------------------
+
+@tag("Owner")
+@route("/api/analytics")
+@useAuth(OwnerSession)
+namespace AnalyticsRoutes {
+  @get
+  op summary(
+    @query from: plainDate,
+    @query to: plainDate,
+  ): AnalyticsSummary | UnauthorizedError | ForbiddenError | ValidationError;
+}
+
+// ---------------------------------------------------------------------------
+// P2: биллинг / Pro stub
+// ---------------------------------------------------------------------------
+
+@tag("Owner")
+@route("/api/billing")
+@useAuth(OwnerSession)
+namespace BillingRoutes {
+  /** Активация Pro по коду (заглушка подписки) */
+  @post
+  @route("/activate-pro")
+  op activatePro(@body body: ActivatePro): Session | UnauthorizedError | ValidationError;
+}
+
+// ---------------------------------------------------------------------------
+// P2: платежи за встречу (YooKassa / stub)
+// ---------------------------------------------------------------------------
+
+@tag("Payments")
+@route("/api/payments")
+namespace PaymentRoutes {
+  @get
+  @route("/{id}")
+  op get(@path id: int32): PaymentInfo | NotFoundError;
+
+  /** Stub-подтверждение оплаты (без реальной YooKassa) */
+  @post
+  @route("/{id}/stub-confirm")
+  op stubConfirm(@path id: int32): PaymentInfo | NotFoundError | ValidationError;
+
+  @post
+  @route("/yookassa/webhook")
+  op yookassaWebhook(@body body: Record<string>): {
+    @statusCode statusCode: 200;
+  };
+}

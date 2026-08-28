@@ -1,6 +1,7 @@
 import "@typespec/http";
 import "@typespec/openapi";
 import "./models.tsp";
+import "./p2.tsp";
 import "./routes.tsp";
 
 using Http;
@@ -16,9 +17,9 @@ using Http;
  * - Гость: открывает /u/{slug}, смотрит типы событий и свободные слоты
  *   (в своей таймзоне на фронтенде), бронирует звонок.
  * - Владелец: регистрируется, входит, управляет типами событий и доступностью,
- *   смотрит и отменяет предстоящие встречи.
+ *   смотрит и отменяет предстоящие встречи; Pro — sync, команда, серии, аналитика.
  */
 @service(#{ title: "Call Calendar API" })
-@OpenAPI.info(#{ version: "0.3.0" })
+@OpenAPI.info(#{ version: "0.4.0" })
 @server("http://localhost:5001", "Локальный сервер разработки")
 namespace CallCalendar;

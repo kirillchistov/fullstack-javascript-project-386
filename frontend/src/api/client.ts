@@ -13,6 +13,7 @@ export const api = createClient<paths>({
   fetch: isDemo ? demoFetch : undefined,
 });
 
+export type { components };
 export type Owner = components['schemas']['Owner'];
 export type OwnerPublic = components['schemas']['OwnerPublic'];
 export type EventType = components['schemas']['EventType'];

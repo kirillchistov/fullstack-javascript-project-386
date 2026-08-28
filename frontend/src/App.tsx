@@ -11,6 +11,12 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import EventTypesPage from './pages/EventTypesPage';
 import ManageBookingPage from './pages/ManageBookingPage';
 import NotificationSettingsPage from './pages/NotificationSettingsPage';
+import BillingPage from './pages/BillingPage';
+import CalendarsPage from './pages/CalendarsPage';
+import TeamPage from './pages/TeamPage';
+import SeriesPage from './pages/SeriesPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import PayStubPage from './pages/PayStubPage';
 import type { ReactNode } from 'react';
 
 function RequireOwner({ children }: { children: ReactNode }) {
@@ -30,6 +36,12 @@ function RequireOwner({ children }: { children: ReactNode }) {
   return children;
 }
 
+const navLink = (to: string, label: string) => (
+  <Button component={Link} to={to} variant="subtle" size="compact-sm">
+    {label}
+  </Button>
+);
+
 export default function App() {
   const { owner, logout } = useAuth();
   const navigate = useNavigate();
@@ -43,8 +55,8 @@ export default function App() {
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
         <Container size="lg" h="100%">
-          <Group h="100%" justify="space-between">
-            <Group gap="lg">
+          <Group h="100%" justify="space-between" wrap="nowrap" gap="xs">
+            <Group gap="xs" wrap="wrap">
               <Title order={3}>
                 <Text
                   component={Link}
@@ -58,44 +70,25 @@ export default function App() {
               </Title>
               {owner && (
                 <>
-                  <Button component={Link} to={`/u/${owner.slug}`} variant="subtle" size="compact-sm">
-                    Моя страница
-                  </Button>
-                  <Button component={Link} to="/admin" variant="subtle" size="compact-sm">
-                    Встречи
-                  </Button>
-                  <Button
-                    component={Link}
-                    to="/admin/event-types"
-                    variant="subtle"
-                    size="compact-sm"
-                  >
-                    Типы встреч
-                  </Button>
-                  <Button
-                    component={Link}
-                    to="/admin/availability"
-                    variant="subtle"
-                    size="compact-sm"
-                  >
-                    Доступность
-                  </Button>
-                  <Button
-                    component={Link}
-                    to="/admin/notifications"
-                    variant="subtle"
-                    size="compact-sm"
-                  >
-                    Уведомления
-                  </Button>
+                  {navLink(`/u/${owner.slug}`, 'Моя страница')}
+                  {navLink('/admin', 'Встречи')}
+                  {navLink('/admin/event-types', 'Типы')}
+                  {navLink('/admin/availability', 'Доступность')}
+                  {navLink('/admin/notifications', 'Уведомления')}
+                  {navLink('/admin/calendars', 'Календари')}
+                  {navLink('/admin/team', 'Команда')}
+                  {navLink('/admin/series', 'Серии')}
+                  {navLink('/admin/analytics', 'Аналитика')}
+                  {navLink('/admin/billing', 'Биллинг')}
                 </>
               )}
             </Group>
-            <Group>
+            <Group wrap="nowrap">
               {owner ? (
                 <>
-                  <Text size="sm" c="dimmed">
+                  <Text size="sm" c="dimmed" visibleFrom="sm">
                     {owner.name}
+                    {owner.plan === 'pro' ? ' · Pro' : ''}
                   </Text>
                   <Button variant="default" size="compact-sm" onClick={handleLogout}>
                     Выйти
@@ -129,6 +122,7 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/u/:slug" element={<BookingPage />} />
             <Route path="/b/:token" element={<ManageBookingPage />} />
+            <Route path="/pay/stub/:id" element={<PayStubPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route
@@ -160,6 +154,54 @@ export default function App() {
               element={
                 <RequireOwner>
                   <NotificationSettingsPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="/admin/billing"
+              element={
+                <RequireOwner>
+                  <BillingPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="/admin/calendars"
+              element={
+                <RequireOwner>
+                  <CalendarsPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="/admin/team"
+              element={
+                <RequireOwner>
+                  <TeamPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="/team/join"
+              element={
+                <RequireOwner>
+                  <TeamPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="/admin/series"
+              element={
+                <RequireOwner>
+                  <SeriesPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="/admin/analytics"
+              element={
+                <RequireOwner>
+                  <AnalyticsPage />
                 </RequireOwner>
               }
             />

@@ -20,6 +20,7 @@ export default function EventTypesPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [durationMinutes, setDurationMinutes] = useState<number | string>(30);
+  const [priceRub, setPriceRub] = useState<number | string>(0);
   const [saving, setSaving] = useState(false);
 
   const load = () => {
@@ -43,6 +44,7 @@ export default function EventTypesPage() {
         name: name.trim(),
         description: description.trim() || undefined,
         durationMinutes: duration,
+        priceRub: Number(priceRub) || 0,
       },
     });
     setSaving(false);
@@ -53,6 +55,7 @@ export default function EventTypesPage() {
     setName('');
     setDescription('');
     setDurationMinutes(30);
+    setPriceRub(0);
     notifications.show({ color: 'green', message: 'Тип события создан' });
     load();
   };
@@ -93,6 +96,7 @@ export default function EventTypesPage() {
               <Table.Tr>
                 <Table.Th>Название</Table.Th>
                 <Table.Th>Длительность</Table.Th>
+                <Table.Th>Цена</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -108,6 +112,7 @@ export default function EventTypesPage() {
                     )}
                   </Table.Td>
                   <Table.Td>{et.durationMinutes} мин</Table.Td>
+                  <Table.Td>{et.priceRub > 0 ? `${et.priceRub} ₽` : 'бесплатно'}</Table.Td>
                   <Table.Td>
                     <Button
                       color="red"
@@ -146,6 +151,13 @@ export default function EventTypesPage() {
             step={15}
             value={typeof durationMinutes === 'number' ? durationMinutes : Number(durationMinutes) || 30}
             onChange={(value) => setDurationMinutes(typeof value === 'number' ? value : Number(value) || 30)}
+          />
+          <NumberInput
+            label="Цена (₽)"
+            description="0 — бесплатная встреча; иначе гость получит ссылку на оплату"
+            min={0}
+            value={typeof priceRub === 'number' ? priceRub : Number(priceRub) || 0}
+            onChange={(value) => setPriceRub(typeof value === 'number' ? value : Number(value) || 0)}
           />
           <Button
             loading={saving}

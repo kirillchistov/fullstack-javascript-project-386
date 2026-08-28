@@ -14,6 +14,7 @@ export function createStore(db = openDatabase()) {
           name: row.name,
           email: row.email,
           slug: row.slug,
+          plan: row.plan === 'pro' ? 'pro' : 'free',
         }
       : null;
 
@@ -26,6 +27,7 @@ export function createStore(db = openDatabase()) {
             ? { description: row.description }
             : {}),
           durationMinutes: row.duration_minutes,
+          priceRub: row.price_rub ?? 0,
         }
       : null;
 
@@ -40,6 +42,7 @@ export function createStore(db = openDatabase()) {
           guestEmail: row.guest_email,
           ...(row.comment != null && row.comment !== '' ? { comment: row.comment } : {}),
           status: row.status,
+          paymentStatus: row.payment_status ?? 'none',
           createdAt: row.created_at,
         }
       : null;
@@ -69,6 +72,27 @@ export function createStore(db = openDatabase()) {
     };
   };
 
+  const mapCalendarConnection = (row) =>
+    row
+      ? {
+          id: row.id,
+          kind: row.kind,
+          label: row.label,
+          ...(row.last_synced_at ? { lastSyncedAt: row.last_synced_at } : {}),
+        }
+      : null;
+
+  const mapPayment = (row) =>
+    row
+      ? {
+          id: row.id,
+          bookingId: row.booking_id,
+          amountRub: row.amount_rub,
+          status: row.status,
+          confirmationUrl: row.confirmation_url,
+        }
+      : null;
+
   return {
     close() {
       db.close();
@@ -90,6 +114,11 @@ export function createStore(db = openDatabase()) {
       return mapOwner(db.prepare('SELECT * FROM owners WHERE id = ?').get(id));
     },
 
+    setOwnerPlan(ownerId, plan) {
+      db.prepare('UPDATE owners SET plan = ? WHERE id = ?').run(plan, ownerId);
+      return this.findOwnerById(ownerId);
+    },
+
     getOwnerPublic(slug) {
       const owner = db
         .prepare('SELECT * FROM owners WHERE slug = ? COLLATE NOCASE')
@@ -109,8 +138,8 @@ export function createStore(db = openDatabase()) {
       try {
         const result = db
           .prepare(
-            `INSERT INTO owners (name, email, slug, password_hash, created_at)
-             VALUES (?, ?, ?, ?, ?)`,
+            `INSERT INTO owners (name, email, slug, password_hash, created_at, plan)
+             VALUES (?, ?, ?, ?, ?, 'free')`,
           )
           .run(name, email, slug, hashPassword(password), now);
         const ownerId = Number(result.lastInsertRowid);
@@ -129,8 +158,8 @@ export function createStore(db = openDatabase()) {
            VALUES (?, 1, 24)`,
         ).run(ownerId);
         db.prepare(
-          `INSERT INTO event_types (owner_id, name, description, duration_minutes)
-           VALUES (?, ?, ?, ?)`,
+          `INSERT INTO event_types (owner_id, name, description, duration_minutes, price_rub)
+           VALUES (?, ?, ?, ?, 0)`,
         ).run(ownerId, 'Вводный звонок', 'Знакомство и обсуждение задачи', 30);
         return this.findOwnerById(ownerId);
       } catch (error) {
@@ -190,24 +219,33 @@ export function createStore(db = openDatabase()) {
       );
     },
 
-    createEventType(ownerId, { name, description, durationMinutes }) {
+    createEventType(ownerId, { name, description, durationMinutes, priceRub }) {
       const result = db
         .prepare(
-          `INSERT INTO event_types (owner_id, name, description, duration_minutes)
-           VALUES (?, ?, ?, ?)`,
+          `INSERT INTO event_types (owner_id, name, description, duration_minutes, price_rub)
+           VALUES (?, ?, ?, ?, ?)`,
         )
-        .run(ownerId, name, description ?? null, durationMinutes);
+        .run(ownerId, name, description ?? null, durationMinutes, priceRub ?? 0);
       return this.findEventType(ownerId, Number(result.lastInsertRowid));
     },
 
-    updateEventType(ownerId, id, { name, description, durationMinutes }) {
+    updateEventType(ownerId, id, { name, description, durationMinutes, priceRub }) {
+      const current = this.findEventType(ownerId, id);
+      if (!current) return null;
       const result = db
         .prepare(
           `UPDATE event_types
-           SET name = ?, description = ?, duration_minutes = ?
+           SET name = ?, description = ?, duration_minutes = ?, price_rub = ?
            WHERE owner_id = ? AND id = ?`,
         )
-        .run(name, description ?? null, durationMinutes, ownerId, id);
+        .run(
+          name,
+          description ?? null,
+          durationMinutes,
+          priceRub !== undefined ? priceRub : current.priceRub,
+          ownerId,
+          id,
+        );
       if (result.changes === 0) return null;
       return this.findEventType(ownerId, id);
     },
@@ -268,7 +306,6 @@ export function createStore(db = openDatabase()) {
         .map(mapBooking);
     },
 
-    /** Активные брони кроме указанной (для переноса) */
     getActiveBookingsExcept(ownerId, bookingId) {
       return db
         .prepare(
@@ -293,12 +330,14 @@ export function createStore(db = openDatabase()) {
 
     createBooking(ownerId, data) {
       const manageToken = crypto.randomUUID();
+      const paymentStatus = data.paymentStatus ?? 'none';
       const result = db
         .prepare(
           `INSERT INTO bookings (
              owner_id, event_type_id, starts_at, ends_at,
-             guest_name, guest_email, comment, status, created_at, manage_token
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+             guest_name, guest_email, comment, status, created_at, manage_token,
+             payment_status, series_id
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
         )
         .run(
           ownerId,
@@ -310,6 +349,8 @@ export function createStore(db = openDatabase()) {
           data.comment ?? null,
           new Date().toISOString(),
           manageToken,
+          paymentStatus,
+          data.seriesId ?? null,
         );
       return mapBookingCreated(
         db.prepare('SELECT * FROM bookings WHERE id = ?').get(Number(result.lastInsertRowid)),
@@ -357,6 +398,7 @@ export function createStore(db = openDatabase()) {
         guestEmail: row.guest_email,
         ...(row.comment ? { comment: row.comment } : {}),
         status: row.status,
+        paymentStatus: row.payment_status ?? 'none',
         _ownerId: row.owner_id,
         _eventTypeId: row.event_type_id,
         _manageToken: row.manage_token,
@@ -418,7 +460,6 @@ export function createStore(db = openDatabase()) {
       return this.getNotificationSettings(ownerId);
     },
 
-    /** Брони, которым пора отправить напоминание */
     listDueReminders(now = new Date()) {
       const nowIso = now.toISOString();
       const nowMs = now.getTime();
@@ -447,6 +488,380 @@ export function createStore(db = openDatabase()) {
       db.prepare(
         `UPDATE bookings SET reminder_sent_at = ? WHERE id = ?`,
       ).run(new Date().toISOString(), bookingId);
+    },
+
+    // --- P2: busy / calendars ---------------------------------------------
+
+    listCalendarConnections(ownerId) {
+      return db
+        .prepare(
+          `SELECT * FROM calendar_connections WHERE owner_id = ? ORDER BY id`,
+        )
+        .all(ownerId)
+        .map(mapCalendarConnection);
+    },
+
+    findCalendarConnection(ownerId, id) {
+      return mapCalendarConnection(
+        db
+          .prepare(
+            `SELECT * FROM calendar_connections WHERE owner_id = ? AND id = ?`,
+          )
+          .get(ownerId, id),
+      );
+    },
+
+    getCalendarConnectionRow(ownerId, id) {
+      return db
+        .prepare(
+          `SELECT * FROM calendar_connections WHERE owner_id = ? AND id = ?`,
+        )
+        .get(ownerId, id);
+    },
+
+    createCalendarConnection(ownerId, { kind, label, config }) {
+      const result = db
+        .prepare(
+          `INSERT INTO calendar_connections
+             (owner_id, kind, label, config_json, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(
+          ownerId,
+          kind,
+          label,
+          JSON.stringify(config ?? {}),
+          new Date().toISOString(),
+        );
+      return this.findCalendarConnection(ownerId, Number(result.lastInsertRowid));
+    },
+
+    deleteCalendarConnection(ownerId, id) {
+      const result = db
+        .prepare(`DELETE FROM calendar_connections WHERE owner_id = ? AND id = ?`)
+        .run(ownerId, id);
+      return result.changes > 0;
+    },
+
+    replaceBusyBlocks(ownerId, connectionId, blocks) {
+      db.prepare(`DELETE FROM busy_blocks WHERE connection_id = ?`).run(connectionId);
+      const insert = db.prepare(
+        `INSERT INTO busy_blocks (owner_id, connection_id, starts_at, ends_at)
+         VALUES (?, ?, ?, ?)`,
+      );
+      for (const b of blocks) {
+        insert.run(ownerId, connectionId, b.startsAt, b.endsAt);
+      }
+      const now = new Date().toISOString();
+      db.prepare(
+        `UPDATE calendar_connections SET last_synced_at = ? WHERE id = ?`,
+      ).run(now, connectionId);
+      return this.findCalendarConnection(ownerId, connectionId);
+    },
+
+    getBusyBlocks(ownerId, fromIso, toIso) {
+      return db
+        .prepare(
+          `SELECT starts_at AS startsAt, ends_at AS endsAt FROM busy_blocks
+           WHERE owner_id = ?
+             AND ends_at > ?
+             AND starts_at < ?
+           ORDER BY starts_at`,
+        )
+        .all(ownerId, fromIso, toIso)
+        .map((r) => ({ startsAt: r.startsAt, endsAt: r.endsAt }));
+    },
+
+    // --- P2: organizations ------------------------------------------------
+
+    listOrganizationsForOwner(ownerId) {
+      return db
+        .prepare(
+          `SELECT o.* FROM organizations o
+           JOIN organization_members m ON m.org_id = o.id
+           WHERE m.owner_id = ?
+           ORDER BY o.id`,
+        )
+        .all(ownerId)
+        .map((row) => ({
+          id: row.id,
+          name: row.name,
+          ownerId: row.owner_id,
+        }));
+    },
+
+    findOrganization(id) {
+      const row = db.prepare('SELECT * FROM organizations WHERE id = ?').get(id);
+      return row
+        ? { id: row.id, name: row.name, ownerId: row.owner_id }
+        : null;
+    },
+
+    isOrgMember(orgId, ownerId) {
+      return Boolean(
+        db
+          .prepare(
+            `SELECT 1 FROM organization_members WHERE org_id = ? AND owner_id = ?`,
+          )
+          .get(orgId, ownerId),
+      );
+    },
+
+    createOrganization(ownerId, name) {
+      const now = new Date().toISOString();
+      const result = db
+        .prepare(
+          `INSERT INTO organizations (name, owner_id, created_at) VALUES (?, ?, ?)`,
+        )
+        .run(name, ownerId, now);
+      const orgId = Number(result.lastInsertRowid);
+      db.prepare(
+        `INSERT INTO organization_members (org_id, owner_id, role) VALUES (?, ?, 'owner')`,
+      ).run(orgId, ownerId);
+      return this.findOrganization(orgId);
+    },
+
+    listOrganizationMembers(orgId) {
+      return db
+        .prepare(
+          `SELECT o.id AS owner_id, o.name, o.email, o.slug, m.role
+           FROM organization_members m
+           JOIN owners o ON o.id = m.owner_id
+           WHERE m.org_id = ?
+           ORDER BY m.role DESC, o.id`,
+        )
+        .all(orgId)
+        .map((row) => ({
+          ownerId: row.owner_id,
+          name: row.name,
+          email: row.email,
+          slug: row.slug,
+          role: row.role,
+        }));
+    },
+
+    createOrganizationInvite(orgId, email) {
+      const token = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO organization_invites (token, org_id, email, created_at)
+         VALUES (?, ?, ?, ?)`,
+      ).run(token, orgId, email, new Date().toISOString());
+      return {
+        token,
+        joinPath: `/team/join?token=${token}`,
+      };
+    },
+
+    joinOrganization(owner, token) {
+      const invite = db
+        .prepare('SELECT * FROM organization_invites WHERE token = ?')
+        .get(token);
+      if (!invite) {
+        const err = new Error('Приглашение не найдено');
+        err.code = 'not_found';
+        throw err;
+      }
+      if (invite.email.toLowerCase() !== owner.email.toLowerCase()) {
+        const err = new Error('Приглашение выдано на другой email');
+        err.code = 'validation_error';
+        throw err;
+      }
+      if (!this.isOrgMember(invite.org_id, owner.id)) {
+        db.prepare(
+          `INSERT INTO organization_members (org_id, owner_id, role) VALUES (?, ?, 'member')`,
+        ).run(invite.org_id, owner.id);
+      }
+      db.prepare('DELETE FROM organization_invites WHERE token = ?').run(token);
+      return this.findOrganization(invite.org_id);
+    },
+
+    // --- P2: booking series -----------------------------------------------
+
+    listBookingSeries(ownerId) {
+      return db
+        .prepare(
+          `SELECT * FROM booking_series WHERE owner_id = ? ORDER BY id DESC`,
+        )
+        .all(ownerId)
+        .map((row) => this.mapSeries(row));
+    },
+
+    mapSeries(row) {
+      if (!row) return null;
+      const bookingIds = db
+        .prepare(
+          `SELECT id FROM bookings WHERE series_id = ? ORDER BY starts_at`,
+        )
+        .all(row.id)
+        .map((b) => b.id);
+      return {
+        id: row.id,
+        eventTypeId: row.event_type_id,
+        guestName: row.guest_name,
+        guestEmail: row.guest_email,
+        ...(row.comment ? { comment: row.comment } : {}),
+        startsAt: row.starts_at,
+        count: row.count,
+        bookingIds,
+      };
+    },
+
+    findBookingSeries(ownerId, id) {
+      return this.mapSeries(
+        db
+          .prepare(`SELECT * FROM booking_series WHERE owner_id = ? AND id = ?`)
+          .get(ownerId, id),
+      );
+    },
+
+    createBookingSeriesRecord(ownerId, data) {
+      const result = db
+        .prepare(
+          `INSERT INTO booking_series
+             (owner_id, event_type_id, guest_name, guest_email, comment, starts_at, count, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          ownerId,
+          data.eventTypeId,
+          data.guestName,
+          data.guestEmail,
+          data.comment ?? null,
+          data.startsAt,
+          data.count,
+          new Date().toISOString(),
+        );
+      return Number(result.lastInsertRowid);
+    },
+
+    cancelBookingSeries(ownerId, id) {
+      const series = this.findBookingSeries(ownerId, id);
+      if (!series) return false;
+      db.prepare(
+        `UPDATE bookings SET status = 'cancelled'
+         WHERE series_id = ? AND status = 'active' AND starts_at > ?`,
+      ).run(id, new Date().toISOString());
+      return true;
+    },
+
+    // --- P2: analytics ----------------------------------------------------
+
+    getAnalyticsSummary(ownerId, from, to) {
+      const fromIso = `${from}T00:00:00.000Z`;
+      const toExclusive = new Date(Date.parse(`${to}T00:00:00.000Z`) + 86400000).toISOString();
+      const created = db
+        .prepare(
+          `SELECT COUNT(*) AS c FROM bookings
+           WHERE owner_id = ? AND created_at >= ? AND created_at < ?`,
+        )
+        .get(ownerId, fromIso, toExclusive).c;
+      const cancelled = db
+        .prepare(
+          `SELECT COUNT(*) AS c FROM bookings
+           WHERE owner_id = ? AND status = 'cancelled'
+             AND created_at >= ? AND created_at < ?`,
+        )
+        .get(ownerId, fromIso, toExclusive).c;
+      const upcoming = db
+        .prepare(
+          `SELECT COUNT(*) AS c FROM bookings
+           WHERE owner_id = ? AND status = 'active' AND starts_at > ?`,
+        )
+        .get(ownerId, new Date().toISOString()).c;
+
+      const byWeekday = [0, 0, 0, 0, 0, 0, 0];
+      const rows = db
+        .prepare(
+          `SELECT starts_at FROM bookings
+           WHERE owner_id = ? AND created_at >= ? AND created_at < ?`,
+        )
+        .all(ownerId, fromIso, toExclusive);
+      for (const r of rows) {
+        const d = new Date(r.starts_at);
+        // JS: 0=Sun … convert to ISO 1=Mon … 7=Sun
+        const iso = ((d.getUTCDay() + 6) % 7) + 1;
+        byWeekday[iso - 1] += 1;
+      }
+
+      return {
+        from,
+        to,
+        created,
+        cancelled,
+        upcoming,
+        byWeekday,
+      };
+    },
+
+    // --- P2: payments -----------------------------------------------------
+
+    createPaymentRecord({ bookingId, amountRub, status, provider, providerPaymentId, confirmationUrl }) {
+      const result = db
+        .prepare(
+          `INSERT INTO payments
+             (booking_id, amount_rub, status, provider, provider_payment_id, confirmation_url, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          bookingId,
+          amountRub,
+          status,
+          provider,
+          providerPaymentId ?? null,
+          confirmationUrl,
+          new Date().toISOString(),
+        );
+      return mapPayment(
+        db.prepare('SELECT * FROM payments WHERE id = ?').get(Number(result.lastInsertRowid)),
+      );
+    },
+
+    updatePaymentDetails(paymentId, { provider, providerPaymentId, confirmationUrl, status }) {
+      db.prepare(
+        `UPDATE payments
+         SET provider = COALESCE(?, provider),
+             provider_payment_id = COALESCE(?, provider_payment_id),
+             confirmation_url = COALESCE(?, confirmation_url),
+             status = COALESCE(?, status)
+         WHERE id = ?`,
+      ).run(
+        provider ?? null,
+        providerPaymentId ?? null,
+        confirmationUrl ?? null,
+        status ?? null,
+        paymentId,
+      );
+      return this.findPayment(paymentId);
+    },
+
+    findPayment(id) {
+      return mapPayment(db.prepare('SELECT * FROM payments WHERE id = ?').get(id));
+    },
+
+    findPaymentByBooking(bookingId) {
+      return mapPayment(
+        db
+          .prepare(`SELECT * FROM payments WHERE booking_id = ? ORDER BY id DESC LIMIT 1`)
+          .get(bookingId),
+      );
+    },
+
+    markPaymentPaid(paymentId) {
+      const payment = this.findPayment(paymentId);
+      if (!payment) return null;
+      db.prepare(`UPDATE payments SET status = 'paid' WHERE id = ?`).run(paymentId);
+      db.prepare(
+        `UPDATE bookings SET payment_status = 'paid' WHERE id = ?`,
+      ).run(payment.bookingId);
+      return this.findPayment(paymentId);
+    },
+
+    findPaymentByProviderId(providerPaymentId) {
+      return mapPayment(
+        db
+          .prepare(`SELECT * FROM payments WHERE provider_payment_id = ?`)
+          .get(providerPaymentId),
+      );
     },
   };
 }

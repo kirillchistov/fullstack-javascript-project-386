@@ -162,6 +162,22 @@ export default function BookingPage() {
               {guestTimezone})
             </Text>
             <Text c="dimmed">Подтверждение отправлено на {booking.guestEmail}</Text>
+            {booking.paymentUrl && booking.paymentStatus === 'pending' && (
+              <Alert color="yellow" title="Требуется оплата">
+                <Text size="sm" mb="xs">
+                  Встреча зарезервирована. Оплатите, чтобы подтвердить.
+                </Text>
+                <Button
+                  component="a"
+                  href={booking.paymentUrl}
+                  size="compact-sm"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Перейти к оплате ({selectedType.priceRub} ₽)
+                </Button>
+              </Alert>
+            )}
             {booking.manageToken && (
               <Text size="sm">
                 Отменить или перенести:{' '}
@@ -233,7 +249,14 @@ export default function BookingPage() {
                             </Text>
                           )}
                         </div>
-                        <Badge variant="light">{et.durationMinutes} мин</Badge>
+                        <Stack gap={4} align="flex-end">
+                          <Badge variant="light">{et.durationMinutes} мин</Badge>
+                          {et.priceRub > 0 && (
+                            <Badge color="teal" variant="light">
+                              {et.priceRub} ₽
+                            </Badge>
+                          )}
+                        </Stack>
                       </Group>
                     </Paper>
                   ))}
@@ -303,6 +326,7 @@ export default function BookingPage() {
                     {selectedType.name},{' '}
                     {dayjs(selectedSlot.startsAt).tz(guestTimezone).format('D MMMM YYYY, HH:mm')}–
                     {dayjs(selectedSlot.endsAt).tz(guestTimezone).format('HH:mm')} ({guestTimezone})
+                    {selectedType.priceRub > 0 ? ` · ${selectedType.priceRub} ₽` : ''}
                   </Text>
                 </div>
                 <TextInput

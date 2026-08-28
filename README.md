@@ -48,7 +48,9 @@ npm run dev
 
 Публичная страница сидового владельца: [/u/kirill](http://localhost:5173/u/kirill). Регистрация — `/register`. Вход по умолчанию: `owner@example.com` / `secret` (переменные `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NAME` / `OWNER_SLUG` / `OWNER_TIMEZONE`). Данные в SQLite (`DATABASE_PATH`, по умолчанию `backend/data/call-calendar.sqlite`).
 
-Уведомления (опционально): `SMTP_URL` и `EMAIL_FROM` для почты, `TELEGRAM_BOT_TOKEN` для Telegram владельцу, `PUBLIC_BASE_URL` — база ссылок в письмах (по умолчанию `http://localhost:5173`). Без SMTP/токена сообщения пишутся в лог сервера (dry-run).
+Уведомления (опционально): `SMTP_URL` и `EMAIL_FROM` для почты, `TELEGRAM_BOT_TOKEN` для Telegram владельцу, `PUBLIC_BASE_URL` — база ссылок в письмах и на stub-оплату (по умолчанию `http://localhost:5173`). Без SMTP/токена сообщения пишутся в лог сервера (dry-run).
+
+P2 (опционально): `BILLING_PRO_CODE` (по умолчанию `pro-dev`) — код активации Pro; `GOOGLE_CLIENT_ID` / `GOOGLE_REDIRECT_URI` — Google OAuth (без них — stub busy); `YOOKASSA_SHOP_ID` / `YOOKASSA_SECRET_KEY` — разовые платежи (без них — `/pay/stub/{id}`); `FRONTEND_ORIGIN` — редирект после Google stub.
 
 Вместо бэкенда можно поднять мок API из контракта (Prism) — удобно при работе только над фронтендом:
 

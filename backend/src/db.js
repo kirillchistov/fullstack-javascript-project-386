@@ -95,6 +95,89 @@ function migrate(db) {
     db.exec('ALTER TABLE bookings ADD COLUMN reminder_sent_at TEXT');
   }
 
+  // --- P2 -----------------------------------------------------------------
+  if (!columnExists(db, 'owners', 'plan')) {
+    db.exec(`ALTER TABLE owners ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'`);
+  }
+  if (!columnExists(db, 'event_types', 'price_rub')) {
+    db.exec('ALTER TABLE event_types ADD COLUMN price_rub INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnExists(db, 'bookings', 'payment_status')) {
+    db.exec(`ALTER TABLE bookings ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'none'`);
+  }
+  if (!columnExists(db, 'bookings', 'series_id')) {
+    db.exec('ALTER TABLE bookings ADD COLUMN series_id INTEGER');
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS calendar_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      label TEXT NOT NULL,
+      config_json TEXT NOT NULL DEFAULT '{}',
+      last_synced_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS busy_blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+      connection_id INTEGER NOT NULL REFERENCES calendar_connections(id) ON DELETE CASCADE,
+      starts_at TEXT NOT NULL,
+      ends_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS organizations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      owner_id INTEGER NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS organization_members (
+      org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      owner_id INTEGER NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      PRIMARY KEY (org_id, owner_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS organization_invites (
+      token TEXT PRIMARY KEY,
+      org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      email TEXT NOT NULL COLLATE NOCASE,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS booking_series (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+      event_type_id INTEGER NOT NULL REFERENCES event_types(id),
+      guest_name TEXT NOT NULL,
+      guest_email TEXT NOT NULL,
+      comment TEXT,
+      starts_at TEXT NOT NULL,
+      count INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      amount_rub INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_payment_id TEXT,
+      confirmation_url TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_busy_owner_range
+      ON busy_blocks(owner_id, starts_at, ends_at);
+    CREATE INDEX IF NOT EXISTS idx_payments_booking
+      ON payments(booking_id);
+  `);
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_bookings_manage_token
       ON bookings(manage_token);
@@ -128,8 +211,8 @@ function seedIfEmpty(db) {
 
   const result = db
     .prepare(
-      `INSERT INTO owners (name, email, slug, password_hash, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO owners (name, email, slug, password_hash, created_at, plan)
+       VALUES (?, ?, ?, ?, ?, 'free')`,
     )
     .run(name, email, slug, hashPassword(password), now);
   const ownerId = Number(result.lastInsertRowid);
@@ -150,8 +233,8 @@ function seedIfEmpty(db) {
   ).run(ownerId);
 
   const insertEt = db.prepare(`
-    INSERT INTO event_types (owner_id, name, description, duration_minutes)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO event_types (owner_id, name, description, duration_minutes, price_rub)
+    VALUES (?, ?, ?, ?, 0)
   `);
   insertEt.run(ownerId, 'Вводный звонок', 'Знакомство и обсуждение задачи', 30);
   insertEt.run(ownerId, 'Консультация', 'Разбор вопросов по проекту', 60);

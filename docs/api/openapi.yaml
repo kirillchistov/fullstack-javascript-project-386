@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
   title: Call Calendar API
-  version: 0.3.0
+  version: 0.4.0
   description: |-
     Call Calendar — сервис «Запись на звонок».
 
@@ -13,13 +13,61 @@ info:
     - Гость: открывает /u/{slug}, смотрит типы событий и свободные слоты
     (в своей таймзоне на фронтенде), бронирует звонок.
     - Владелец: регистрируется, входит, управляет типами событий и доступностью,
-    смотрит и отменяет предстоящие встречи.
+    смотрит и отменяет предстоящие встречи; Pro — sync, команда, серии, аналитика.
 tags:
   - name: Owners
   - name: Session
   - name: Guest
   - name: Owner
+  - name: Payments
 paths:
+  /api/analytics:
+    get:
+      operationId: AnalyticsRoutes_summary
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          explode: false
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSummary'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
   /api/availability:
     get:
       operationId: AvailabilityRoutes_getAvailability
@@ -77,6 +125,148 @@ paths:
               $ref: '#/components/schemas/Availability'
       security:
         - ApiKeyAuth: []
+  /api/billing/activate-pro:
+    post:
+      operationId: BillingRoutes_activatePro
+      description: Активация Pro по коду (заглушка подписки)
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivatePro'
+      security:
+        - ApiKeyAuth: []
+  /api/booking-series:
+    get:
+      operationId: BookingSeriesRoutes_list
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingSeries'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
+    post:
+      operationId: BookingSeriesRoutes_create
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingSeries'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '409':
+          description: '409 — конфликт: слот уже занят или находится в прошлом'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingSeriesCreate'
+      security:
+        - ApiKeyAuth: []
+  /api/booking-series/{id}:
+    delete:
+      operationId: BookingSeriesRoutes_cancel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
   /api/bookings:
     get:
       operationId: OwnerBookingRoutes_list
@@ -119,6 +309,178 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
+  /api/calendar-connections:
+    get:
+      operationId: CalendarConnectionRoutes_list
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CalendarConnection'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
+  /api/calendar-connections/google/start:
+    post:
+      operationId: CalendarConnectionRoutes_startGoogle
+      description: |-
+        Старт Google OAuth. Без GOOGLE_CLIENT_ID — stub authUrl
+        на /api/calendar-connections/google/stub-connect.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleAuthStart'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
+  /api/calendar-connections/ics:
+    post:
+      operationId: CalendarConnectionRoutes_connectIcs
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarConnection'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IcsConnectionCreate'
+      security:
+        - ApiKeyAuth: []
+  /api/calendar-connections/{id}:
+    delete:
+      operationId: CalendarConnectionRoutes_remove
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
+  /api/calendar-connections/{id}/sync:
+    post:
+      operationId: CalendarConnectionRoutes_sync
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarConnection'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
         '404':
           description: 404 — ресурс не найден
           content:
@@ -405,6 +767,198 @@ paths:
               $ref: '#/components/schemas/NotificationSettings'
       security:
         - ApiKeyAuth: []
+  /api/organizations:
+    get:
+      operationId: OrganizationRoutes_listMine
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Organization'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
+    post:
+      operationId: OrganizationRoutes_create
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationCreate'
+      security:
+        - ApiKeyAuth: []
+  /api/organizations/join:
+    post:
+      operationId: OrganizationRoutes_join
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationJoin'
+      security:
+        - ApiKeyAuth: []
+  /api/organizations/{id}/invites:
+    post:
+      operationId: OrganizationRoutes_invite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInvite'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationInviteCreate'
+      security:
+        - ApiKeyAuth: []
+  /api/organizations/{id}/members:
+    get:
+      operationId: OrganizationRoutes_listMembers
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizationMember'
+        '401':
+          description: 401 — нет активной сессии владельца или неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 403 — нужна подписка Pro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+      tags:
+        - Owner
+      security:
+        - ApiKeyAuth: []
   /api/owners:
     post:
       operationId: OwnerRoutes_register
@@ -440,6 +994,80 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/OwnerCreate'
+  /api/payments/yookassa/webhook:
+    post:
+      operationId: PaymentRoutes_yookassaWebhook
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+      tags:
+        - Payments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+  /api/payments/{id}:
+    get:
+      operationId: PaymentRoutes_get
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentInfo'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+      tags:
+        - Payments
+  /api/payments/{id}/stub-confirm:
+    post:
+      operationId: PaymentRoutes_stubConfirm
+      description: Stub-подтверждение оплаты (без реальной YooKassa)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentInfo'
+        '404':
+          description: 404 — ресурс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '422':
+          description: 422 — ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+      tags:
+        - Payments
   /api/public/{slug}:
     get:
       operationId: PublicRoutes_getOwner
@@ -660,6 +1288,18 @@ paths:
         - ApiKeyAuth: []
 components:
   schemas:
+    ActivatePro:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: |-
+            Код активации. Совпадает с BILLING_PRO_CODE или "pro-dev"
+            в development без переменной.
+      description: Ручная активация Pro (заглушка подписки)
     AlreadyExistsError:
       type: object
       required:
@@ -673,6 +1313,38 @@ components:
         message:
           type: string
       description: 409 — email или slug уже заняты при регистрации
+    AnalyticsSummary:
+      type: object
+      required:
+        - from
+        - to
+        - created
+        - cancelled
+        - upcoming
+        - byWeekday
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        created:
+          type: integer
+          format: int32
+        cancelled:
+          type: integer
+          format: int32
+        upcoming:
+          type: integer
+          format: int32
+          description: Активные будущие на момент запроса
+        byWeekday:
+          type: array
+          items:
+            type: integer
+            format: int32
+          description: Число броней по ISO-дню недели 1..7
     Availability:
       type: object
       required:
@@ -769,6 +1441,7 @@ components:
         - guestName
         - guestEmail
         - status
+        - paymentStatus
         - createdAt
       properties:
         id:
@@ -793,6 +1466,8 @@ components:
           description: Комментарий гостя владельцу (тема звонка и т. п.)
         status:
           $ref: '#/components/schemas/BookingStatus'
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
         createdAt:
           type: string
           format: date-time
@@ -806,6 +1481,7 @@ components:
         guestEmail: ivan@example.com
         comment: Хочу обсудить проект
         status: active
+        paymentStatus: none
         createdAt: '2026-07-21T12:00:00Z'
     BookingCreate:
       type: object
@@ -841,6 +1517,7 @@ components:
         - guestName
         - guestEmail
         - status
+        - paymentStatus
         - createdAt
         - manageToken
       properties:
@@ -865,12 +1542,17 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/BookingStatus'
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
         createdAt:
           type: string
           format: date-time
         manageToken:
           type: string
           description: Секретный токен управления встречей гостем
+        paymentUrl:
+          type: string
+          description: URL оплаты, если тип события платный и статус pending
       description: |-
         Ответ при создании брони: обычные поля + секретный токен
         для отмены/переноса гостем (ссылка /b/{manageToken}).
@@ -883,11 +1565,104 @@ components:
           type: string
           format: date-time
       description: Перенос встречи гостем на другой свободный слот того же типа
+    BookingSeries:
+      type: object
+      required:
+        - id
+        - eventTypeId
+        - guestName
+        - guestEmail
+        - startsAt
+        - count
+        - bookingIds
+      properties:
+        id:
+          type: integer
+          format: int32
+        eventTypeId:
+          type: integer
+          format: int32
+        guestName:
+          type: string
+        guestEmail:
+          type: string
+          format: email
+        comment:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+          description: Первый старт серии, UTC
+        count:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 52
+          description: Число встреч в серии (1–52)
+        bookingIds:
+          type: array
+          items:
+            type: integer
+            format: int32
+          description: Созданные брони (id)
+      description: Серия повторяющихся встреч (тьютор ↔ ученик), еженедельно
+    BookingSeriesCreate:
+      type: object
+      required:
+        - eventTypeId
+        - guestName
+        - guestEmail
+        - startsAt
+        - count
+      properties:
+        eventTypeId:
+          type: integer
+          format: int32
+        guestName:
+          type: string
+          minLength: 1
+        guestEmail:
+          type: string
+          format: email
+        comment:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        count:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 52
     BookingStatus:
       type: string
       enum:
         - active
         - cancelled
+    CalendarConnection:
+      type: object
+      required:
+        - id
+        - kind
+        - label
+      properties:
+        id:
+          type: integer
+          format: int32
+        kind:
+          $ref: '#/components/schemas/CalendarConnectionKind'
+        label:
+          type: string
+          description: Для ICS — URL; для Google — email календаря или "primary"
+        lastSyncedAt:
+          type: string
+          format: date-time
+      description: Подключённый источник занятости (busy)
+    CalendarConnectionKind:
+      type: string
+      enum:
+        - google
+        - ics
     ConflictError:
       type: object
       required:
@@ -920,6 +1695,7 @@ components:
         - id
         - name
         - durationMinutes
+        - priceRub
       properties:
         id:
           type: integer
@@ -936,12 +1712,18 @@ components:
           description: |-
             Длительность встречи в минутах: 15–240, кратно 15.
             От неё зависят длина слота и шаг сетки при вычислении свободного времени.
+        priceRub:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Цена в рублях; 0 — бесплатно
       description: Тип события — то, на что гость записывается (например, «Вводный звонок»)
       example:
         id: 1
         name: Вводный звонок
         description: Знакомство и обсуждение задачи
         durationMinutes: 30
+        priceRub: 0
     EventTypeWrite:
       type: object
       required:
@@ -958,6 +1740,10 @@ components:
           format: int32
           minimum: 15
           maximum: 240
+        priceRub:
+          type: integer
+          format: int32
+          minimum: 0
       description: Создание / обновление типа события владельцем
     FieldError:
       type: object
@@ -970,6 +1756,27 @@ components:
         message:
           type: string
       description: Ошибка одного поля при валидации
+    ForbiddenError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          enum:
+            - forbidden
+        message:
+          type: string
+      description: 403 — нужна подписка Pro
+    GoogleAuthStart:
+      type: object
+      required:
+        - authUrl
+      properties:
+        authUrl:
+          type: string
+          description: URL для OAuth-редиректа пользователя в Google
     GuestBooking:
       type: object
       required:
@@ -984,6 +1791,7 @@ components:
         - guestName
         - guestEmail
         - status
+        - paymentStatus
       properties:
         id:
           type: integer
@@ -1014,7 +1822,21 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/BookingStatus'
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
       description: Карточка встречи для гостя по секретному токену
+    IcsConnectionCreate:
+      type: object
+      required:
+        - url
+        - label
+      properties:
+        url:
+          type: string
+          minLength: 1
+        label:
+          type: string
+          minLength: 1
     NotFoundError:
       type: object
       required:
@@ -1049,6 +1871,82 @@ components:
           maximum: 168
           description: За сколько часов до встречи слать напоминание гостю и владельцу (1–168)
       description: Настройки уведомлений владельца
+    OrgRole:
+      type: string
+      enum:
+        - owner
+        - member
+    Organization:
+      type: object
+      required:
+        - id
+        - name
+        - ownerId
+      properties:
+        id:
+          type: integer
+          format: int32
+        name:
+          type: string
+        ownerId:
+          type: integer
+          format: int32
+          description: Владелец-создатель организации
+    OrganizationCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+    OrganizationInvite:
+      type: object
+      required:
+        - token
+        - joinPath
+      properties:
+        token:
+          type: string
+        joinPath:
+          type: string
+          description: Ссылка для принявшего приглашение (фронт /team/join?token=)
+    OrganizationInviteCreate:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+    OrganizationJoin:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          minLength: 1
+    OrganizationMember:
+      type: object
+      required:
+        - ownerId
+        - name
+        - email
+        - slug
+        - role
+      properties:
+        ownerId:
+          type: integer
+          format: int32
+        name:
+          type: string
+        email:
+          type: string
+        slug:
+          type: string
+        role:
+          $ref: '#/components/schemas/OrgRole'
     Owner:
       type: object
       required:
@@ -1056,6 +1954,7 @@ components:
         - name
         - email
         - slug
+        - plan
       properties:
         id:
           type: integer
@@ -1072,6 +1971,10 @@ components:
           description: |-
             Публичный идентификатор в URL: латиница, цифры, дефис;
             2–32 символа, начинается и заканчивается буквой или цифрой.
+        plan:
+          allOf:
+            - $ref: '#/components/schemas/Plan'
+          description: 'Тариф: free или pro (команда, sync, аналитика, серии)'
       description: |-
         Владелец календаря. Создаётся через регистрацию; публичная страница —
         /u/{slug} на фронтенде и /api/public/{slug} в API.
@@ -1080,6 +1983,7 @@ components:
         name: Кирилл Чистов
         email: owner@example.com
         slug: kirill
+        plan: free
     OwnerCreate:
       type: object
       required:
@@ -1125,6 +2029,41 @@ components:
         name: Кирилл Чистов
         slug: kirill
         timezone: Europe/Moscow
+    PaymentInfo:
+      type: object
+      required:
+        - id
+        - bookingId
+        - amountRub
+        - status
+        - confirmationUrl
+      properties:
+        id:
+          type: integer
+          format: int32
+        bookingId:
+          type: integer
+          format: int32
+        amountRub:
+          type: integer
+          format: int32
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        confirmationUrl:
+          type: string
+          description: URL оплаты (YooKassa или stub)
+    PaymentStatus:
+      type: string
+      enum:
+        - none
+        - pending
+        - paid
+        - failed
+    Plan:
+      type: string
+      enum:
+        - free
+        - pro
     Session:
       type: object
       required:

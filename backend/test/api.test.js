@@ -492,3 +492,206 @@ test('уведомления: чтение и сохранение настро�
   assert.equal(updated.json().telegramChatId, '12345');
   assert.equal(updated.json().reminderHoursBefore, 12);
 });
+
+test('P2: Pro paywall и активация кодом', async () => {
+  const app = build();
+  const auth = await login(app);
+
+  const blocked = await app.inject({
+    method: 'GET',
+    url: '/api/calendar-connections',
+    ...auth,
+  });
+  assert.equal(blocked.statusCode, 403);
+  assert.equal(blocked.json().code, 'forbidden');
+
+  const bad = await app.inject({
+    method: 'POST',
+    url: '/api/billing/activate-pro',
+    ...auth,
+    payload: { code: 'wrong' },
+  });
+  assert.equal(bad.statusCode, 422);
+
+  const ok = await app.inject({
+    method: 'POST',
+    url: '/api/billing/activate-pro',
+    ...auth,
+    payload: { code: 'pro-dev' },
+  });
+  assert.equal(ok.statusCode, 200);
+  assert.equal(ok.json().owner.plan, 'pro');
+
+  const list = await app.inject({
+    method: 'GET',
+    url: '/api/calendar-connections',
+    ...auth,
+  });
+  assert.equal(list.statusCode, 200);
+  assert.deepEqual(list.json(), []);
+});
+
+test('P2: Google stub sync вычитает busy из слотов', async () => {
+  const app = build();
+  const auth = await login(app);
+  await app.inject({
+    method: 'POST',
+    url: '/api/billing/activate-pro',
+    ...auth,
+    payload: { code: 'pro-dev' },
+  });
+
+  const start = await app.inject({
+    method: 'POST',
+    url: '/api/calendar-connections/google/start',
+    ...auth,
+  });
+  assert.equal(start.statusCode, 200);
+  assert.match(start.json().authUrl, /stub-connect/);
+
+  const connect = await app.inject({
+    method: 'GET',
+    url: '/api/calendar-connections/google/stub-connect',
+    ...auth,
+  });
+  assert.ok([302, 301].includes(connect.statusCode));
+
+  const connections = await app.inject({
+    method: 'GET',
+    url: '/api/calendar-connections',
+    ...auth,
+  });
+  assert.equal(connections.statusCode, 200);
+  assert.equal(connections.json().length, 1);
+  assert.equal(connections.json()[0].kind, 'google');
+});
+
+test('P2: организация и приглашение', async () => {
+  const app = build();
+  const auth = await login(app);
+  await app.inject({
+    method: 'POST',
+    url: '/api/billing/activate-pro',
+    ...auth,
+    payload: { code: 'pro-dev' },
+  });
+
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/organizations',
+    ...auth,
+    payload: { name: 'Студия' },
+  });
+  assert.equal(created.statusCode, 201);
+  const orgId = created.json().id;
+
+  const invite = await app.inject({
+    method: 'POST',
+    url: `/api/organizations/${orgId}/invites`,
+    ...auth,
+    payload: { email: 'mate@example.com' },
+  });
+  assert.equal(invite.statusCode, 200);
+  assert.ok(invite.json().token);
+
+  const reg = await app.inject({
+    method: 'POST',
+    url: '/api/owners',
+    payload: {
+      name: 'Коллега',
+      email: 'mate@example.com',
+      password: 'secret1',
+      slug: 'mate',
+    },
+  });
+  assert.equal(reg.statusCode, 201);
+  const mateCookie = reg.cookies.find((c) => c.name === 'session');
+
+  const joined = await app.inject({
+    method: 'POST',
+    url: '/api/organizations/join',
+    cookies: { session: mateCookie.value },
+    payload: { token: invite.json().token },
+  });
+  assert.equal(joined.statusCode, 200);
+  assert.equal(joined.json().id, orgId);
+
+  const members = await app.inject({
+    method: 'GET',
+    url: `/api/organizations/${orgId}/members`,
+    ...auth,
+  });
+  assert.equal(members.statusCode, 200);
+  assert.equal(members.json().length, 2);
+});
+
+test('P2: платная встреча и stub-confirm', async () => {
+  const app = build();
+  const auth = await login(app);
+  const types = await app.inject({ method: 'GET', url: '/api/event-types', ...auth });
+  const et = types.json()[0];
+
+  const priced = await app.inject({
+    method: 'PUT',
+    url: `/api/event-types/${et.id}`,
+    ...auth,
+    payload: {
+      name: et.name,
+      description: et.description,
+      durationMinutes: et.durationMinutes,
+      priceRub: 1500,
+    },
+  });
+  assert.equal(priced.statusCode, 200);
+  assert.equal(priced.json().priceRub, 1500);
+
+  const from = nextWorkday();
+  const slots = await app.inject({
+    method: 'GET',
+    url: `/api/public/kirill/slots?from=${from}&to=${from}&eventTypeId=${et.id}`,
+  });
+  assert.ok(slots.json().length > 0);
+  const slot = slots.json()[0];
+
+  const booked = await app.inject({
+    method: 'POST',
+    url: '/api/public/kirill/bookings',
+    payload: {
+      eventTypeId: et.id,
+      startsAt: slot.startsAt,
+      guestName: 'Плательщик',
+      guestEmail: 'pay@example.com',
+    },
+  });
+  assert.equal(booked.statusCode, 201);
+  assert.equal(booked.json().paymentStatus, 'pending');
+  assert.ok(booked.json().paymentUrl);
+
+  const paymentId = Number(booked.json().paymentUrl.split('/').pop());
+  const confirmed = await app.inject({
+    method: 'POST',
+    url: `/api/payments/${paymentId}/stub-confirm`,
+  });
+  assert.equal(confirmed.statusCode, 200);
+  assert.equal(confirmed.json().status, 'paid');
+});
+
+test('P2: аналитика после активации Pro', async () => {
+  const app = build();
+  const auth = await login(app);
+  await app.inject({
+    method: 'POST',
+    url: '/api/billing/activate-pro',
+    ...auth,
+    payload: { code: 'pro-dev' },
+  });
+
+  const summary = await app.inject({
+    method: 'GET',
+    url: '/api/analytics?from=2026-01-01&to=2026-12-31',
+    ...auth,
+  });
+  assert.equal(summary.statusCode, 200);
+  assert.ok(Number.isInteger(summary.json().created));
+  assert.equal(summary.json().byWeekday.length, 7);
+});

@@ -4,6 +4,11 @@ using Http;
 
 namespace CallCalendar;
 
+enum Plan {
+  free,
+  pro,
+}
+
 // ---------------------------------------------------------------------------
 // Доменные сущности
 // ---------------------------------------------------------------------------
@@ -17,6 +22,7 @@ namespace CallCalendar;
   name: "Кирилл Чистов",
   email: "owner@example.com",
   slug: "kirill",
+  plan: Plan.free,
 })
 model Owner {
   id: int32;
@@ -33,6 +39,9 @@ model Owner {
    */
   @pattern("^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
   slug: string;
+
+  /** Тариф: free или pro (команда, sync, аналитика, серии) */
+  plan: Plan;
 }
 
 /** Публичный профиль владельца для гостевой страницы бронирования */
@@ -72,6 +81,7 @@ model OwnerCreate {
   name: "Вводный звонок",
   description: "Знакомство и обсуждение задачи",
   durationMinutes: 30,
+  priceRub: 0,
 })
 model EventType {
   id: int32;
@@ -87,6 +97,10 @@ model EventType {
   @minValue(15)
   @maxValue(240)
   durationMinutes: int32;
+
+  /** Цена в рублях; 0 — бесплатно */
+  @minValue(0)
+  priceRub: int32;
 }
 
 /** Создание / обновление типа события владельцем */
@@ -99,6 +113,9 @@ model EventTypeWrite {
   @minValue(15)
   @maxValue(240)
   durationMinutes: int32;
+
+  @minValue(0)
+  priceRub?: int32;
 }
 
 /**
@@ -194,6 +211,13 @@ enum BookingStatus {
   cancelled,
 }
 
+enum PaymentStatus {
+  none,
+  pending,
+  paid,
+  failed,
+}
+
 /** Бронирование для владельца (без секретного токена гостя) */
 @example(#{
   id: 1,
@@ -204,6 +228,7 @@ enum BookingStatus {
   guestEmail: "ivan@example.com",
   comment: "Хочу обсудить проект",
   status: BookingStatus.active,
+  paymentStatus: PaymentStatus.none,
   createdAt: utcDateTime.fromISO("2026-07-21T12:00:00Z"),
 })
 model Booking {
@@ -225,6 +250,8 @@ model Booking {
 
   status: BookingStatus;
 
+  paymentStatus: PaymentStatus;
+
   createdAt: utcDateTime;
 }
 
@@ -244,10 +271,14 @@ model BookingCreated {
 
   comment?: string;
   status: BookingStatus;
+  paymentStatus: PaymentStatus;
   createdAt: utcDateTime;
 
   /** Секретный токен управления встречей гостем */
   manageToken: string;
+
+  /** URL оплаты, если тип события платный и статус pending */
+  paymentUrl?: string;
 }
 
 /** Карточка встречи для гостя по секретному токену */
@@ -267,6 +298,7 @@ model GuestBooking {
 
   comment?: string;
   status: BookingStatus;
+  paymentStatus: PaymentStatus;
 }
 
 /** Данные для создания бронирования гостем */

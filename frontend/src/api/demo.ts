@@ -7,13 +7,14 @@ import type { Availability, Booking, BookingCreate, EventType, Owner } from './c
  * упрощение демо), брони и настройки сохраняются в localStorage.
  */
 
-const STORAGE_KEY = 'call-calendar-demo-v3';
+const STORAGE_KEY = 'call-calendar-demo-v4';
 
 const OWNER: Owner = {
   id: 1,
   name: 'Кирилл Чистов',
   email: 'owner@example.com',
   slug: 'kirill',
+  plan: 'free',
 };
 
 type DemoBooking = Booking & { manageToken: string };
@@ -50,12 +51,14 @@ const defaultState = (): DemoState => ({
       name: 'Вводный звонок',
       description: 'Знакомство и обсуждение задачи',
       durationMinutes: 30,
+      priceRub: 0,
     },
     {
       id: 2,
       name: 'Консультация',
       description: 'Разбор вопросов по проекту',
       durationMinutes: 60,
+      priceRub: 0,
     },
   ],
   bookings: [],
@@ -179,6 +182,7 @@ export async function demoFetch(input: Request): Promise<Response> {
       name: body.name,
       email: body.email,
       slug: body.slug,
+      plan: 'free',
     };
     state.owners.push({ ...owner, password: body.password });
     state.loggedIn = true;
@@ -250,13 +254,22 @@ export async function demoFetch(input: Request): Promise<Response> {
         guestEmail: body.guestEmail,
         comment: body.comment,
         status: 'active',
+        paymentStatus: (et.priceRub ?? 0) > 0 ? 'pending' : 'none',
         createdAt: dayjs().toISOString(),
         manageToken: crypto.randomUUID(),
       };
       state.nextBookingId += 1;
       state.bookings.push(booking);
       save();
-      return json(booking, 201);
+      return json(
+        {
+          ...booking,
+          ...((et.priceRub ?? 0) > 0
+            ? { paymentUrl: `/pay/stub/${booking.id}` }
+            : {}),
+        },
+        201,
+      );
     }
   }
 
@@ -281,6 +294,7 @@ export async function demoFetch(input: Request): Promise<Response> {
       guestEmail: booking.guestEmail,
       comment: booking.comment,
       status: booking.status,
+      paymentStatus: booking.paymentStatus ?? 'none',
     });
 
     if (method === 'GET') return json(guestView());
@@ -308,11 +322,32 @@ export async function demoFetch(input: Request): Promise<Response> {
     // демо: если не нашли — всё равно пускаем как сид
     state.loggedIn = true;
     save();
-    return json({ owner: found ? { id: found.id, name: found.name, email: found.email, slug: found.slug } : OWNER });
+    return json({
+      owner: found
+        ? {
+            id: found.id,
+            name: found.name,
+            email: found.email,
+            slug: found.slug,
+            plan: found.plan ?? 'free',
+          }
+        : OWNER,
+    });
   }
 
   if (path === '/api/session' && method === 'GET') {
-    return state.loggedIn ? json({ owner: OWNER }) : unauthorized();
+    const current = state.owners.find((o) => o.id === OWNER.id) ?? OWNER;
+    return state.loggedIn
+      ? json({
+          owner: {
+            id: current.id,
+            name: current.name,
+            email: current.email,
+            slug: current.slug,
+            plan: current.plan ?? 'free',
+          },
+        })
+      : unauthorized();
   }
 
   if (path === '/api/session' && method === 'DELETE') {
@@ -332,12 +367,14 @@ export async function demoFetch(input: Request): Promise<Response> {
       name: string;
       description?: string;
       durationMinutes: number;
+      priceRub?: number;
     };
     const et: EventType = {
       id: state.nextEventTypeId,
       name: body.name,
       description: body.description,
       durationMinutes: body.durationMinutes,
+      priceRub: body.priceRub ?? 0,
     };
     state.nextEventTypeId += 1;
     state.eventTypes.push(et);
@@ -397,6 +434,52 @@ export async function demoFetch(input: Request): Promise<Response> {
     state.notificationSettings = (await input.json()) as DemoState['notificationSettings'];
     save();
     return json(state.notificationSettings);
+  }
+
+  if (path === '/api/billing/activate-pro' && method === 'POST') {
+    if (!state.loggedIn) return unauthorized();
+    const seed = state.owners.find((o) => o.id === OWNER.id);
+    if (seed) seed.plan = 'pro';
+    OWNER.plan = 'pro';
+    save();
+    return json({ owner: { ...OWNER, plan: 'pro' } });
+  }
+
+  const currentPlan = () =>
+    state.owners.find((o) => o.id === OWNER.id)?.plan ?? OWNER.plan ?? 'free';
+
+  if (
+    path.startsWith('/api/calendar-connections') ||
+    path.startsWith('/api/booking-series') ||
+    path.startsWith('/api/analytics')
+  ) {
+    if (!state.loggedIn) return unauthorized();
+    if (currentPlan() !== 'pro') {
+      return json(
+        { code: 'forbidden', message: 'Функция доступна на тарифе Pro' },
+        403,
+      );
+    }
+    if (path === '/api/calendar-connections' && method === 'GET') return json([]);
+    if (path === '/api/booking-series' && method === 'GET') return json([]);
+    if (path === '/api/analytics' && method === 'GET') {
+      return json({
+        from: url.searchParams.get('from'),
+        to: url.searchParams.get('to'),
+        created: state.bookings.length,
+        cancelled: state.bookings.filter((b) => b.status === 'cancelled').length,
+        upcoming: state.bookings.filter(
+          (b) => b.status === 'active' && dayjs(b.startsAt).isAfter(dayjs()),
+        ).length,
+        byWeekday: [0, 0, 0, 0, 0, 0, 0],
+      });
+    }
+    return json({ code: 'not_found', message: 'Демо: эндпоинт не реализован' }, 404);
+  }
+
+  if (path === '/api/organizations' && method === 'GET') {
+    if (!state.loggedIn) return unauthorized();
+    return json([]);
   }
 
   return json({ code: 'not_found', message: 'Неизвестный маршрут' }, 404);
