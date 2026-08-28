@@ -222,6 +222,7 @@ enum PaymentStatus {
 @example(#{
   id: 1,
   eventTypeId: 1,
+  eventTypeName: "Вводный звонок",
   startsAt: utcDateTime.fromISO("2026-07-27T10:00:00Z"),
   endsAt: utcDateTime.fromISO("2026-07-27T10:30:00Z"),
   guestName: "Иван Петров",
@@ -235,6 +236,9 @@ model Booking {
   id: int32;
 
   eventTypeId: int32;
+
+  /** Название типа события на момент ответа (для списков владельца) */
+  eventTypeName: string;
 
   startsAt: utcDateTime;
 

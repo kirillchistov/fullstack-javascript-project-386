@@ -284,6 +284,7 @@ test('владелец: вход, список встреч, отмена осв
   const list = await app.inject({ method: 'GET', url: '/api/bookings', ...auth });
   assert.equal(list.statusCode, 200);
   assert.equal(list.json().length, 1);
+  assert.equal(list.json()[0].eventTypeName, et.name);
 
   const cancel = await app.inject({
     method: 'DELETE',

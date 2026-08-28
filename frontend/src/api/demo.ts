@@ -19,6 +19,15 @@ const OWNER: Owner = {
 
 type DemoBooking = Booking & { manageToken: string };
 
+function publicBooking(booking: DemoBooking) {
+  const { manageToken: _t, ...rest } = booking;
+  const et = state.eventTypes.find((t) => t.id === booking.eventTypeId);
+  return {
+    ...rest,
+    eventTypeName: booking.eventTypeName ?? et?.name ?? 'Встреча',
+  };
+}
+
 type DemoState = {
   availability: Availability;
   eventTypes: EventType[];
@@ -248,6 +257,7 @@ export async function demoFetch(input: Request): Promise<Response> {
       const booking: DemoBooking = {
         id: state.nextBookingId,
         eventTypeId: body.eventTypeId,
+        eventTypeName: et.name,
         startsAt: startsAt.toISOString(),
         endsAt: startsAt.add(et.durationMinutes, 'minute').toISOString(),
         guestName: body.guestName,
@@ -395,7 +405,8 @@ export async function demoFetch(input: Request): Promise<Response> {
     if (!state.loggedIn) return unauthorized();
     const upcoming = state.bookings
       .filter((b) => b.status === 'active' && dayjs(b.startsAt).isAfter(dayjs()))
-      .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+      .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+      .map(publicBooking);
     return json(upcoming);
   }
 

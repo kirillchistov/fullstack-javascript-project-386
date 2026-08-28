@@ -36,6 +36,7 @@ export function createStore(db = openDatabase()) {
       ? {
           id: row.id,
           eventTypeId: row.event_type_id,
+          eventTypeName: row.event_type_name ?? 'Встреча',
           startsAt: row.starts_at,
           endsAt: row.ends_at,
           guestName: row.guest_name,
@@ -46,6 +47,10 @@ export function createStore(db = openDatabase()) {
           createdAt: row.created_at,
         }
       : null;
+
+  const bookingSelect = `SELECT b.*, et.name AS event_type_name
+    FROM bookings b
+    JOIN event_types et ON et.id = b.event_type_id`;
 
   const mapBookingCreated = (row) =>
     row
@@ -298,9 +303,9 @@ export function createStore(db = openDatabase()) {
     getActiveBookings(ownerId) {
       return db
         .prepare(
-          `SELECT * FROM bookings
-           WHERE owner_id = ? AND status = 'active'
-           ORDER BY starts_at`,
+          `${bookingSelect}
+           WHERE b.owner_id = ? AND b.status = 'active'
+           ORDER BY b.starts_at`,
         )
         .all(ownerId)
         .map(mapBooking);
@@ -309,9 +314,9 @@ export function createStore(db = openDatabase()) {
     getActiveBookingsExcept(ownerId, bookingId) {
       return db
         .prepare(
-          `SELECT * FROM bookings
-           WHERE owner_id = ? AND status = 'active' AND id != ?
-           ORDER BY starts_at`,
+          `${bookingSelect}
+           WHERE b.owner_id = ? AND b.status = 'active' AND b.id != ?
+           ORDER BY b.starts_at`,
         )
         .all(ownerId, bookingId)
         .map(mapBooking);
@@ -321,8 +326,8 @@ export function createStore(db = openDatabase()) {
       return mapBooking(
         db
           .prepare(
-            `SELECT * FROM bookings
-             WHERE owner_id = ? AND id = ? AND status = 'active'`,
+            `${bookingSelect}
+             WHERE b.owner_id = ? AND b.id = ? AND b.status = 'active'`,
           )
           .get(ownerId, id),
       );
@@ -353,7 +358,9 @@ export function createStore(db = openDatabase()) {
           data.seriesId ?? null,
         );
       return mapBookingCreated(
-        db.prepare('SELECT * FROM bookings WHERE id = ?').get(Number(result.lastInsertRowid)),
+        db
+          .prepare(`${bookingSelect} WHERE b.id = ?`)
+          .get(Number(result.lastInsertRowid)),
       );
     },
 

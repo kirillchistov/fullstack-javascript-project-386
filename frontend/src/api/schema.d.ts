@@ -612,6 +612,7 @@ export interface components {
          * @example {
          *       "id": 1,
          *       "eventTypeId": 1,
+         *       "eventTypeName": "Вводный звонок",
          *       "startsAt": "2026-07-27T10:00:00Z",
          *       "endsAt": "2026-07-27T10:30:00Z",
          *       "guestName": "Иван Петров",
@@ -627,6 +628,8 @@ export interface components {
             id: number;
             /** Format: int32 */
             eventTypeId: number;
+            /** @description Название типа события на момент ответа (для списков владельца) */
+            eventTypeName: string;
             /** Format: date-time */
             startsAt: string;
             /** Format: date-time */

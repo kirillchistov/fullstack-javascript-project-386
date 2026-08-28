@@ -1436,6 +1436,7 @@ components:
       required:
         - id
         - eventTypeId
+        - eventTypeName
         - startsAt
         - endsAt
         - guestName
@@ -1450,6 +1451,9 @@ components:
         eventTypeId:
           type: integer
           format: int32
+        eventTypeName:
+          type: string
+          description: Название типа события на момент ответа (для списков владельца)
         startsAt:
           type: string
           format: date-time
@@ -1475,6 +1479,7 @@ components:
       example:
         id: 1
         eventTypeId: 1
+        eventTypeName: Вводный звонок
         startsAt: '2026-07-27T10:00:00Z'
         endsAt: '2026-07-27T10:30:00Z'
         guestName: Иван Петров
