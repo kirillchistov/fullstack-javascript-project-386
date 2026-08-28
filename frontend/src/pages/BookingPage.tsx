@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -52,6 +52,7 @@ export default function BookingPage() {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [booking, setBooking] = useState<BookingCreated | null>(null);
+  const slotsRequestRef = useRef(0);
 
   useEffect(() => {
     if (!slug) return;
@@ -72,34 +73,47 @@ export default function BookingPage() {
     });
   }, [slug]);
 
-  const loadSlots = (day: string, eventType: EventType) => {
-    setSlotsLoading(true);
-    setSelectedSlot(null);
-    api
-      .GET('/api/public/{slug}/slots', {
-        params: {
-          path: { slug },
-          query: { from: day, to: day, eventTypeId: eventType.id },
-        },
-      })
-      .then(({ data, error }) => {
-        if (error) {
-          notifications.show({ color: 'red', message: error.message });
-          setSlots([]);
-        } else {
-          setSlots(data ?? []);
-        }
-      })
-      .finally(() => setSlotsLoading(false));
-  };
+  const loadSlots = useCallback(
+    (day: string, eventType: EventType) => {
+      const requestId = ++slotsRequestRef.current;
+      setSlotsLoading(true);
+      setSelectedSlot(null);
+      api
+        .GET('/api/public/{slug}/slots', {
+          params: {
+            path: { slug },
+            query: { from: day, to: day, eventTypeId: eventType.id },
+          },
+        })
+        .then(({ data, error }) => {
+          if (requestId !== slotsRequestRef.current) return;
+          if (error) {
+            notifications.show({ color: 'red', message: error.message });
+            setSlots([]);
+          } else {
+            setSlots(data ?? []);
+          }
+        })
+        .finally(() => {
+          if (requestId === slotsRequestRef.current) {
+            setSlotsLoading(false);
+          }
+        });
+    },
+    [slug],
+  );
 
   useEffect(() => {
     if (!date || !selectedType || !owner) {
+      slotsRequestRef.current += 1;
       setSlots(null);
       return;
     }
     loadSlots(date, selectedType);
-  }, [date, selectedType?.id, owner?.slug]);
+    return () => {
+      slotsRequestRef.current += 1;
+    };
+  }, [date, selectedType?.id, owner?.slug, loadSlots]);
 
   const handleSubmit = async () => {
     if (!selectedType || !selectedSlot || !slug) return;

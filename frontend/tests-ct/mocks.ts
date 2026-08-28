@@ -64,6 +64,20 @@ export async function mockSlots(
   return state;
 }
 
+/** Первый запрос за «сегодня» задерживается; ответы за другие даты — сразу (для теста гонки). */
+export async function mockSlotsRace(page: Page, slug = SLUG): Promise<void> {
+  const today = dayjs().format('YYYY-MM-DD');
+  await page.route(`**/api/public/${slug}/slots**`, async (route) => {
+    const from =
+      new URL(route.request().url()).searchParams.get('from') ?? today;
+    if (from === today) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return route.fulfill({ json: slotsFor(from, ['10:00']) });
+    }
+    return route.fulfill({ json: slotsFor(from, ['15:00']) });
+  });
+}
+
 export async function mockCreateBooking(
   page: Page,
   { conflict = false, slug = SLUG }: { conflict?: boolean; slug?: string } = {},
@@ -86,12 +100,15 @@ export async function mockCreateBooking(
     const booking: Booking = {
       id: 1,
       eventTypeId: body.eventTypeId,
+      eventTypeName:
+        eventTypes.find((t) => t.id === body.eventTypeId)?.name ?? 'Встреча',
       startsAt: body.startsAt,
       endsAt: dayjs(body.startsAt).add(30, 'minute').toISOString(),
       guestName: body.guestName,
       guestEmail: body.guestEmail,
       comment: body.comment,
       status: 'active',
+      paymentStatus: 'none',
       createdAt: dayjs().toISOString(),
     };
     return route.fulfill({ status: 201, json: { ...booking, manageToken: 'demo-token' } });

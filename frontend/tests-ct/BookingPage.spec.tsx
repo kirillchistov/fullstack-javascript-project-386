@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/experimental-ct-react';
 import dayjs from 'dayjs';
 import { BookingScreen } from './fixtures';
-import { dayAriaLabel, mockCreateBooking, mockEventTypes, mockPublicOwner, mockSlots } from './mocks';
+import { dayAriaLabel, mockCreateBooking, mockEventTypes, mockPublicOwner, mockSlots, mockSlotsRace } from './mocks';
 
 test.beforeEach(async ({ page }) => {
   await mockPublicOwner(page);
@@ -105,4 +105,23 @@ test('409 при бронировании: уведомление, возвра�
   ).toBeVisible();
   await expect(component.getByText(/^Свободные слоты на /)).toBeVisible();
   expect(slotsState.requests).toBeGreaterThan(requestsBefore);
+});
+
+test('запоздавший ответ за старую дату не перезаписывает слоты новой даты', async ({
+  page,
+  mount,
+}) => {
+  await mockSlotsRace(page);
+  const component = await mount(<BookingScreen />);
+  const tomorrow = dayjs().add(1, 'day');
+
+  await component.getByLabel(dayAriaLabel(tomorrow), { exact: true }).click();
+
+  await expect(component.getByRole('button', { name: '15:00', exact: true })).toBeVisible();
+  await expect(component.getByText(/^Свободные слоты на /)).toBeVisible();
+
+  await page.waitForTimeout(500);
+
+  await expect(component.getByRole('button', { name: '10:00', exact: true })).toHaveCount(0);
+  await expect(component.getByRole('button', { name: '15:00', exact: true })).toBeVisible();
 });
