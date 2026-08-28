@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Card, Group, Stack, Text, TextInput, Title } from '@mantine/core';
 import { Link, useNavigate } from 'react-router-dom';
+import { CallpalLogo } from '../components/CallpalLogo';
 import { useAuth } from '../auth';
 
 export default function HomePage() {
@@ -11,7 +12,10 @@ export default function HomePage() {
   return (
     <Stack gap="xl" py="md">
       <div>
-        <Title order={2}>Запись на звонок</Title>
+        <CallpalLogo iconSize={48} />
+        <Title order={2} mt="sm">
+          Запись на звонок
+        </Title>
         <Text c="dimmed" maw={560}>
           Владелец публикует свободное время по ссылке /u/имя — гость выбирает слот без
           переписки «когда вам удобно?».

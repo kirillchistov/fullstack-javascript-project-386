@@ -1,7 +1,8 @@
-import { Alert, AppShell, Button, Container, Group, Loader, Text, Title } from '@mantine/core';
-import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Alert, AppShell, Container, Loader, Group } from '@mantine/core';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { isDemo } from './api/client';
 import { useAuth } from './auth';
+import { AppHeader } from './components/AppHeader';
 import BookingPage from './pages/BookingPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -36,77 +37,11 @@ function RequireOwner({ children }: { children: ReactNode }) {
   return children;
 }
 
-const navLink = (to: string, label: string) => (
-  <Button component={Link} to={to} variant="subtle" size="compact-sm">
-    {label}
-  </Button>
-);
-
 export default function App() {
-  const { owner, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/');
-  };
-
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
-        <Container size="lg" h="100%">
-          <Group h="100%" justify="space-between" wrap="nowrap" gap="xs">
-            <Group gap="xs" wrap="wrap">
-              <Title order={3}>
-                <Text
-                  component={Link}
-                  to="/"
-                  inherit
-                  c="blue.7"
-                  style={{ textDecoration: 'none' }}
-                >
-                  Запись на звонок
-                </Text>
-              </Title>
-              {owner && (
-                <>
-                  {navLink(`/u/${owner.slug}`, 'Моя страница')}
-                  {navLink('/admin', 'Встречи')}
-                  {navLink('/admin/event-types', 'Типы')}
-                  {navLink('/admin/availability', 'Доступность')}
-                  {navLink('/admin/notifications', 'Уведомления')}
-                  {navLink('/admin/calendars', 'Календари')}
-                  {navLink('/admin/team', 'Команда')}
-                  {navLink('/admin/series', 'Серии')}
-                  {navLink('/admin/analytics', 'Аналитика')}
-                  {navLink('/admin/billing', 'Биллинг')}
-                </>
-              )}
-            </Group>
-            <Group wrap="nowrap">
-              {owner ? (
-                <>
-                  <Text size="sm" c="dimmed" visibleFrom="sm">
-                    {owner.name}
-                    {owner.plan === 'pro' ? ' · Pro' : ''}
-                  </Text>
-                  <Button variant="default" size="compact-sm" onClick={handleLogout}>
-                    Выйти
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button component={Link} to="/register" variant="subtle" size="compact-sm">
-                    Регистрация
-                  </Button>
-                  <Button component={Link} to="/login" variant="default" size="compact-sm">
-                    Войти
-                  </Button>
-                </>
-              )}
-            </Group>
-          </Group>
-        </Container>
+        <AppHeader />
       </AppShell.Header>
 
       <AppShell.Main>
