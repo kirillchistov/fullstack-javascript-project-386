@@ -67,6 +67,7 @@ export default function OwnerBookingsPage() {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Дата и время</Table.Th>
+                <Table.Th>Тип встречи</Table.Th>
                 <Table.Th>Гость</Table.Th>
                 <Table.Th>Комментарий</Table.Th>
                 <Table.Th>Статус</Table.Th>
@@ -81,6 +82,9 @@ export default function OwnerBookingsPage() {
                     <Text size="sm" c="dimmed">
                       {dayjs(b.startsAt).format('HH:mm')}–{dayjs(b.endsAt).format('HH:mm')}
                     </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text>{b.eventTypeName}</Text>
                   </Table.Td>
                   <Table.Td>
                     <Text>{b.guestName}</Text>

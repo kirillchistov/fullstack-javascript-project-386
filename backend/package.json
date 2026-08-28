@@ -16,6 +16,10 @@
     "ajv-formats": "^3.0.1",
     "dayjs": "^1.11.21",
     "fastify": "^5.10.0",
-    "js-yaml": "^5.2.1"
+    "js-yaml": "^5.2.1",
+    "nodemailer": "^9.0.5"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.1"
   }
 }

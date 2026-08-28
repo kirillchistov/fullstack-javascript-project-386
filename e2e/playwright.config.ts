@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * E2E-тесты гоняются против реального стека: Fastify-бэкенд (in-memory)
+ * E2E-тесты гоняются против реального стека: Fastify-бэкенд (SQLite :memory:)
  * и Vite dev-сервер фронтенда поднимаются автоматически (webServer).
  * Бэкенд один на весь прогон, поэтому тесты выполняются последовательно
  * (workers: 1) и используют уникальные данные, чтобы не мешать друг другу.
@@ -21,9 +21,13 @@ export default defineConfig({
   webServer: [
     {
       command: 'npm --prefix ../backend start',
-      url: 'http://localhost:5001/api/event-types',
+      url: 'http://localhost:5001/api/public/kirill',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
+      env: {
+        ...process.env,
+        DATABASE_PATH: ':memory:',
+      },
     },
     {
       command: 'npm --prefix ../frontend run dev',

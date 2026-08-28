@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -18,11 +18,24 @@ import {
 import { DatePicker } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import dayjs from 'dayjs';
-import { api, type Booking, type EventType, type Slot } from '../api/client';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+import { Link, useParams } from 'react-router-dom';
+import { api, type BookingCreated, type EventType, type OwnerPublic, type Slot } from '../api/client';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 type Step = 'pick' | 'form' | 'done';
 
+const guestTimezone =
+  Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Moscow';
+
 export default function BookingPage() {
+  const { slug = '' } = useParams();
+  const [owner, setOwner] = useState<OwnerPublic | null>(null);
+  const [ownerError, setOwnerError] = useState<string | null>(null);
+
   const [eventTypes, setEventTypes] = useState<EventType[] | null>(null);
   const [selectedType, setSelectedType] = useState<EventType | null>(null);
 
@@ -38,45 +51,75 @@ export default function BookingPage() {
   const [guestEmail, setGuestEmail] = useState('');
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [booking, setBooking] = useState<Booking | null>(null);
+  const [booking, setBooking] = useState<BookingCreated | null>(null);
+  const slotsRequestRef = useRef(0);
 
   useEffect(() => {
-    api.GET('/api/event-types').then(({ data }) => {
-      setEventTypes(data ?? []);
-      if (data && data.length > 0) {
-        setSelectedType(data[0]);
+    if (!slug) return;
+    setOwnerError(null);
+    api.GET('/api/public/{slug}', { params: { path: { slug } } }).then(({ data, error, response }) => {
+      if (error || !data) {
+        setOwner(null);
+        setOwnerError(
+          response.status === 404 ? 'Календарь не найден' : error?.message || 'Ошибка загрузки',
+        );
+        return;
       }
+      setOwner(data);
     });
-  }, []);
+    api.GET('/api/public/{slug}/event-types', { params: { path: { slug } } }).then(({ data }) => {
+      setEventTypes(data ?? []);
+      if (data && data.length > 0) setSelectedType(data[0]);
+    });
+  }, [slug]);
 
-  const loadSlots = (day: string) => {
-    setSlotsLoading(true);
-    setSelectedSlot(null);
-    api
-      .GET('/api/slots', { params: { query: { from: day, to: day } } })
-      .then(({ data, error }) => {
-        if (error) {
-          notifications.show({ color: 'red', message: error.message });
-          setSlots([]);
-        } else {
-          setSlots(data ?? []);
-        }
-      })
-      .finally(() => setSlotsLoading(false));
-  };
+  const loadSlots = useCallback(
+    (day: string, eventType: EventType) => {
+      const requestId = ++slotsRequestRef.current;
+      setSlotsLoading(true);
+      setSelectedSlot(null);
+      api
+        .GET('/api/public/{slug}/slots', {
+          params: {
+            path: { slug },
+            query: { from: day, to: day, eventTypeId: eventType.id },
+          },
+        })
+        .then(({ data, error }) => {
+          if (requestId !== slotsRequestRef.current) return;
+          if (error) {
+            notifications.show({ color: 'red', message: error.message });
+            setSlots([]);
+          } else {
+            setSlots(data ?? []);
+          }
+        })
+        .finally(() => {
+          if (requestId === slotsRequestRef.current) {
+            setSlotsLoading(false);
+          }
+        });
+    },
+    [slug],
+  );
 
   useEffect(() => {
-    if (!date) {
+    if (!date || !selectedType || !owner) {
+      slotsRequestRef.current += 1;
       setSlots(null);
       return;
     }
-    loadSlots(date);
-  }, [date]);
+    loadSlots(date, selectedType);
+    return () => {
+      slotsRequestRef.current += 1;
+    };
+  }, [date, selectedType?.id, owner?.slug, loadSlots]);
 
   const handleSubmit = async () => {
-    if (!selectedType || !selectedSlot) return;
+    if (!selectedType || !selectedSlot || !slug) return;
     setSubmitting(true);
-    const { data, error, response } = await api.POST('/api/bookings', {
+    const { data, error, response } = await api.POST('/api/public/{slug}/bookings', {
+      params: { path: { slug } },
       body: {
         eventTypeId: selectedType.id,
         startsAt: selectedSlot.startsAt,
@@ -95,7 +138,7 @@ export default function BookingPage() {
       notifications.show({ color: 'red', title: 'Ошибка', message });
       if (response.status === 409) {
         setStep('pick');
-        if (date) loadSlots(date);
+        if (date) loadSlots(date, selectedType);
       }
       return;
     }
@@ -103,6 +146,22 @@ export default function BookingPage() {
     setBooking(data);
     setStep('done');
   };
+
+  if (ownerError) {
+    return (
+      <Alert color="red" title="Не удалось открыть календарь">
+        {ownerError}
+      </Alert>
+    );
+  }
+
+  if (!owner || eventTypes === null) {
+    return (
+      <Group justify="center" py="xl">
+        <Loader />
+      </Group>
+    );
+  }
 
   if (step === 'done' && booking && selectedType) {
     return (
@@ -112,10 +171,35 @@ export default function BookingPage() {
             <Text>
               <b>{selectedType.name}</b> — {selectedType.durationMinutes} минут
             </Text>
-            <Text>{dayjs(booking.startsAt).format('D MMMM YYYY, HH:mm')}</Text>
-            <Text c="dimmed">
-              Подтверждение отправлено на {booking.guestEmail}
+            <Text>
+              {dayjs(booking.startsAt).tz(guestTimezone).format('D MMMM YYYY, HH:mm')} (
+              {guestTimezone})
             </Text>
+            <Text c="dimmed">Подтверждение отправлено на {booking.guestEmail}</Text>
+            {booking.paymentUrl && booking.paymentStatus === 'pending' && (
+              <Alert color="yellow" title="Требуется оплата">
+                <Text size="sm" mb="xs">
+                  Встреча зарезервирована. Оплатите, чтобы подтвердить.
+                </Text>
+                <Button
+                  component="a"
+                  href={booking.paymentUrl}
+                  size="compact-sm"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Перейти к оплате ({selectedType.priceRub} ₽)
+                </Button>
+              </Alert>
+            )}
+            {booking.manageToken && (
+              <Text size="sm">
+                Отменить или перенести:{' '}
+                <Text span component={Link} to={`/b/${booking.manageToken}`} c="blue">
+                  открыть управление встречей
+                </Text>
+              </Text>
+            )}
           </Stack>
         </Alert>
         <Button
@@ -126,7 +210,7 @@ export default function BookingPage() {
             setGuestName('');
             setGuestEmail('');
             setComment('');
-            if (date) loadSlots(date); // список мог устареть после бронирования
+            if (date && selectedType) loadSlots(date, selectedType);
           }}
         >
           Забронировать ещё одну встречу
@@ -138,8 +222,11 @@ export default function BookingPage() {
   return (
     <Stack gap="lg">
       <div>
-        <Title order={2}>Выберите время звонка</Title>
-        <Text c="dimmed">Свободные слоты по 30 минут. Выберите дату и удобное время.</Text>
+        <Title order={2}>Запись к {owner.name}</Title>
+        <Text c="dimmed">
+          Свободные слоты. Время показано в вашем поясе ({guestTimezone}
+          {owner.timezone !== guestTimezone ? `; у владельца — ${owner.timezone}` : ''}).
+        </Text>
       </div>
 
       <Grid gap="lg">
@@ -149,9 +236,7 @@ export default function BookingPage() {
               <Text fw={600} mb="sm">
                 Тип события
               </Text>
-              {eventTypes === null ? (
-                <Loader size="sm" />
-              ) : eventTypes.length === 0 ? (
+              {eventTypes.length === 0 ? (
                 <Text c="dimmed" size="sm">
                   Нет доступных типов событий
                 </Text>
@@ -166,7 +251,7 @@ export default function BookingPage() {
                       bg={selectedType?.id === et.id ? 'blue.0' : undefined}
                       onClick={() => {
                         setSelectedType(et);
-                        setStep('pick'); // смена типа возвращает к выбору слота
+                        setStep('pick');
                       }}
                     >
                       <Group justify="space-between">
@@ -178,7 +263,14 @@ export default function BookingPage() {
                             </Text>
                           )}
                         </div>
-                        <Badge variant="light">{et.durationMinutes} мин</Badge>
+                        <Stack gap={4} align="flex-end">
+                          <Badge variant="light">{et.durationMinutes} мин</Badge>
+                          {et.priceRub > 0 && (
+                            <Badge color="teal" variant="light">
+                              {et.priceRub} ₽
+                            </Badge>
+                          )}
+                        </Stack>
                       </Group>
                     </Paper>
                   ))}
@@ -194,7 +286,7 @@ export default function BookingPage() {
                 value={date}
                 onChange={(value) => {
                   setDate(value);
-                  setStep('pick'); // смена даты возвращает к выбору слота
+                  setStep('pick');
                 }}
                 minDate={today}
                 maxDate={dayjs().add(13, 'day').format('YYYY-MM-DD')}
@@ -224,7 +316,7 @@ export default function BookingPage() {
                         variant={selectedSlot?.startsAt === slot.startsAt ? 'filled' : 'light'}
                         onClick={() => setSelectedSlot(slot)}
                       >
-                        {dayjs(slot.startsAt).format('HH:mm')}
+                        {dayjs(slot.startsAt).tz(guestTimezone).format('HH:mm')}
                       </Button>
                     ))}
                   </SimpleGrid>
@@ -246,8 +338,9 @@ export default function BookingPage() {
                   <Text fw={600}>Ваши данные</Text>
                   <Text size="sm" c="dimmed">
                     {selectedType.name},{' '}
-                    {dayjs(selectedSlot.startsAt).format('D MMMM YYYY, HH:mm')}–
-                    {dayjs(selectedSlot.endsAt).format('HH:mm')}
+                    {dayjs(selectedSlot.startsAt).tz(guestTimezone).format('D MMMM YYYY, HH:mm')}–
+                    {dayjs(selectedSlot.endsAt).tz(guestTimezone).format('HH:mm')} ({guestTimezone})
+                    {selectedType.priceRub > 0 ? ` · ${selectedType.priceRub} ₽` : ''}
                   </Text>
                 </div>
                 <TextInput

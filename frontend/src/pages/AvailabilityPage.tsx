@@ -5,15 +5,17 @@ import {
   Card,
   Group,
   Loader,
+  NumberInput,
   Select,
   Stack,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
-import { TimeInput } from '@mantine/dates';
+import { DateInput, TimeInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
-import { api, type AvailabilityRule } from '../api/client';
+import dayjs from 'dayjs';
+import { api, type AvailabilityException, type AvailabilityRule, type DayInterval } from '../api/client';
 
 const WEEKDAYS = [
   { value: '1', label: 'Понедельник' },
@@ -27,7 +29,9 @@ const WEEKDAYS = [
 
 export default function AvailabilityPage() {
   const [timezone, setTimezone] = useState('');
+  const [bufferMinutes, setBufferMinutes] = useState(0);
   const [rules, setRules] = useState<AvailabilityRule[] | null>(null);
+  const [exceptions, setExceptions] = useState<AvailabilityException[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -38,7 +42,9 @@ export default function AvailabilityPage() {
         return;
       }
       setTimezone(data.timezone);
+      setBufferMinutes(data.bufferMinutes ?? 0);
       setRules(data.rules);
+      setExceptions(data.exceptions ?? []);
     });
   }, []);
 
@@ -56,11 +62,57 @@ export default function AvailabilityPage() {
     setRules((prev) => (prev ? prev.filter((_, i) => i !== index) : prev));
   };
 
+  const addException = () => {
+    setExceptions((prev) => [
+      ...prev,
+      { date: dayjs().add(1, 'day').format('YYYY-MM-DD'), intervals: [] },
+    ]);
+  };
+
+  const updateException = (index: number, patch: Partial<AvailabilityException>) => {
+    setExceptions((prev) => prev.map((e, i) => (i === index ? { ...e, ...patch } : e)));
+  };
+
+  const addExceptionInterval = (index: number) => {
+    setExceptions((prev) =>
+      prev.map((e, i) =>
+        i === index
+          ? {
+              ...e,
+              intervals: [...e.intervals, { startTime: '10:00', endTime: '14:00' }],
+            }
+          : e,
+      ),
+    );
+  };
+
+  const updateExceptionInterval = (
+    exIndex: number,
+    intIndex: number,
+    patch: Partial<DayInterval>,
+  ) => {
+    setExceptions((prev) =>
+      prev.map((e, i) =>
+        i === exIndex
+          ? {
+              ...e,
+              intervals: e.intervals.map((iv, j) => (j === intIndex ? { ...iv, ...patch } : iv)),
+            }
+          : e,
+      ),
+    );
+  };
+
   const handleSave = async () => {
     if (!rules) return;
     setSaving(true);
     const { data, error } = await api.PUT('/api/availability', {
-      body: { timezone, rules },
+      body: {
+        timezone,
+        bufferMinutes: Number(bufferMinutes) || 0,
+        rules,
+        exceptions,
+      },
     });
     setSaving(false);
 
@@ -73,7 +125,9 @@ export default function AvailabilityPage() {
       return;
     }
     setTimezone(data.timezone);
+    setBufferMinutes(data.bufferMinutes);
     setRules(data.rules);
+    setExceptions(data.exceptions);
     notifications.show({ color: 'green', message: 'Расписание доступности сохранено' });
   };
 
@@ -90,7 +144,8 @@ export default function AvailabilityPage() {
       <div>
         <Title order={2}>Доступность</Title>
         <Text c="dimmed">
-          Недельное расписание, из которого вычисляются свободные слоты по 30 минут.
+          Недельные окна, перерывы (несколько интервалов в один день), буфер между встречами и
+          исключения (праздники / отпуск).
         </Text>
       </div>
 
@@ -103,13 +158,26 @@ export default function AvailabilityPage() {
             onChange={(e) => setTimezone(e.currentTarget.value)}
             maw={320}
           />
+          <NumberInput
+            label="Буфер между встречами (мин)"
+            description="Время до и после каждой встречи, когда новые слоты не предлагаются"
+            min={0}
+            max={120}
+            step={15}
+            value={bufferMinutes}
+            onChange={(v) => setBufferMinutes(typeof v === 'number' ? v : Number(v) || 0)}
+            maw={280}
+          />
 
           <Text fw={600} mt="sm">
-            Правила
+            Недельные правила
+          </Text>
+          <Text size="sm" c="dimmed">
+            Перерыв: добавьте два правила в один день, например 10:00–13:00 и 14:00–18:00.
           </Text>
           {rules.length === 0 && (
             <Text c="dimmed" size="sm">
-              Правил пока нет — гости не увидят ни одного слота. Добавьте хотя бы одно.
+              Правил пока нет — гости не увидят ни одного слота.
             </Text>
           )}
           {rules.map((rule, index) => (
@@ -146,17 +214,98 @@ export default function AvailabilityPage() {
               </ActionIcon>
             </Group>
           ))}
-
-          <Group justify="space-between" mt="md">
-            <Button variant="default" onClick={addRule}>
-              Добавить правило
-            </Button>
-            <Button loading={saving} onClick={handleSave} disabled={!timezone.trim()}>
-              Сохранить
-            </Button>
-          </Group>
+          <Button variant="default" onClick={addRule} w="fit-content">
+            Добавить правило
+          </Button>
         </Stack>
       </Card>
+
+      <Card withBorder>
+        <Stack>
+          <Text fw={600}>Исключения (праздники и особые дни)</Text>
+          <Text size="sm" c="dimmed">
+            Без интервалов — весь день недоступен. С интервалами — работа только в них.
+          </Text>
+          {exceptions.map((ex, index) => (
+            <Stack key={index} gap="xs" p="sm" style={{ border: '1px solid #eee', borderRadius: 8 }}>
+              <Group align="flex-end">
+                <DateInput
+                  label="Дата"
+                  value={ex.date}
+                  onChange={(v) =>
+                    updateException(index, {
+                      date: typeof v === 'string' ? v : dayjs(v).format('YYYY-MM-DD'),
+                    })
+                  }
+                  valueFormat="YYYY-MM-DD"
+                  w={180}
+                />
+                <Button
+                  variant="light"
+                  size="compact-sm"
+                  onClick={() => addExceptionInterval(index)}
+                >
+                  Добавить интервал
+                </Button>
+                <Button
+                  color="red"
+                  variant="light"
+                  size="compact-sm"
+                  onClick={() => setExceptions((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  Удалить день
+                </Button>
+              </Group>
+              {ex.intervals.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Весь день выходной
+                </Text>
+              ) : (
+                ex.intervals.map((iv, j) => (
+                  <Group key={j} align="flex-end">
+                    <TimeInput
+                      label="С"
+                      value={iv.startTime}
+                      onChange={(e) =>
+                        updateExceptionInterval(index, j, { startTime: e.currentTarget.value })
+                      }
+                      w={110}
+                    />
+                    <TimeInput
+                      label="До"
+                      value={iv.endTime}
+                      onChange={(e) =>
+                        updateExceptionInterval(index, j, { endTime: e.currentTarget.value })
+                      }
+                      w={110}
+                    />
+                    <ActionIcon
+                      color="red"
+                      variant="light"
+                      onClick={() =>
+                        updateException(index, {
+                          intervals: ex.intervals.filter((_, k) => k !== j),
+                        })
+                      }
+                    >
+                      ✕
+                    </ActionIcon>
+                  </Group>
+                ))
+              )}
+            </Stack>
+          ))}
+          <Button variant="default" onClick={addException} w="fit-content">
+            Добавить исключение
+          </Button>
+        </Stack>
+      </Card>
+
+      <Group justify="flex-end">
+        <Button loading={saving} onClick={handleSave} disabled={!timezone.trim()}>
+          Сохранить
+        </Button>
+      </Group>
     </Stack>
   );
 }

@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AnalyticsRoutes_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/availability": {
         parameters: {
             query?: never;
@@ -11,15 +27,64 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Текущие настройки доступности */
         get: operations["AvailabilityRoutes_getAvailability"];
         /**
          * @description Полная замена настроек доступности.
-         *     Интервалы каждого правила должны быть кратны 30 минутам и не пересекаться в рамках дня.
+         *     Правила и интервалы исключений кратны 15 минутам и не пересекаются в рамках дня.
+         *     Перерыв = два правила в один weekday с разрывом между ними.
          */
         put: operations["AvailabilityRoutes_updateAvailability"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/activate-pro": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Активация Pro по коду (заглушка подписки) */
+        post: operations["BillingRoutes_activatePro"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/booking-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["BookingSeriesRoutes_list"];
+        put?: never;
+        post: operations["BookingSeriesRoutes_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/booking-series/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["BookingSeriesRoutes_cancel"];
         options?: never;
         head?: never;
         patch?: never;
@@ -32,15 +97,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Владелец смотрит список предстоящих встреч (только активные, от текущего момента) */
-        get: operations["BookingRoutes_list"];
+        get: operations["OwnerBookingRoutes_list"];
         put?: never;
-        /**
-         * @description Гость создаёт бронирование на свободный слот.
-         *     409 — слот уже занят, находится в прошлом, вне расписания
-         *     или дальше горизонта бронирования (14 дней).
-         */
-        post: operations["BookingRoutes_create"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -57,8 +116,91 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Владелец отменяет встречу (перевод в статус cancelled, слот снова свободен) */
-        delete: operations["BookingRoutes_cancel"];
+        delete: operations["OwnerBookingRoutes_cancel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CalendarConnectionRoutes_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar-connections/google/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Старт Google OAuth. Без GOOGLE_CLIENT_ID — stub authUrl
+         *     на /api/calendar-connections/google/stub-connect.
+         */
+        post: operations["CalendarConnectionRoutes_startGoogle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar-connections/ics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CalendarConnectionRoutes_connectIcs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar-connections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["CalendarConnectionRoutes_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar-connections/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CalendarConnectionRoutes_sync"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -71,8 +213,270 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Список типов событий, на которые можно записаться */
-        get: operations["EventTypeRoutes_list"];
+        get: operations["OwnerEventTypeRoutes_list"];
+        put?: never;
+        post: operations["OwnerEventTypeRoutes_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/event-types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["OwnerEventTypeRoutes_update"];
+        post?: never;
+        delete: operations["OwnerEventTypeRoutes_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/guest/bookings/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Карточка встречи по секретной ссылке */
+        get: operations["GuestBookingRoutes_get"];
+        put?: never;
+        post?: never;
+        /** @description Отмена встречи гостем */
+        delete: operations["GuestBookingRoutes_cancel"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Перенос на другой свободный слот того же типа события.
+         *     409 — новый слот недоступен.
+         */
+        patch: operations["GuestBookingRoutes_reschedule"];
+        trace?: never;
+    };
+    "/api/notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["NotificationSettingsRoutes_get"];
+        put: operations["NotificationSettingsRoutes_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["OrganizationRoutes_listMine"];
+        put?: never;
+        post: operations["OrganizationRoutes_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["OrganizationRoutes_join"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{id}/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["OrganizationRoutes_invite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["OrganizationRoutes_listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Регистрация нового владельца календаря.
+         *     При успехе устанавливается сессионная cookie (как при входе).
+         *     409 — email или slug уже заняты.
+         */
+        post: operations["OwnerRoutes_register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/payments/yookassa/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PaymentRoutes_yookassaWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/payments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PaymentRoutes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/payments/{id}/stub-confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stub-подтверждение оплаты (без реальной YooKassa) */
+        post: operations["PaymentRoutes_stubConfirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Публичный профиль владельца для страницы /u/{slug} */
+        get: operations["PublicRoutes_getOwner"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{slug}/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Гость создаёт бронирование. В ответе — manageToken для отмены/переноса.
+         *     409 — слот занят с учётом буфера, в прошлом, вне расписания или за горизонтом.
+         */
+        post: operations["PublicRoutes_createBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{slug}/event-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Типы событий этого владельца */
+        get: operations["PublicRoutes_listEventTypes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/{slug}/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Свободные слоты за период [from, to] для выбранного типа события.
+         *     Учитываются буфер между встречами и исключения (праздники/отпуск).
+         *     Длина слота = durationMinutes типа. Горизонт — 14 дней включая сегодня.
+         */
+        get: operations["PublicRoutes_listSlots"];
         put?: never;
         post?: never;
         delete?: never;
@@ -100,47 +504,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/slots": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * @description Свободные слоты за период [from, to] включительно.
-         *     Слоты вычисляются из правил доступности за вычетом активных бронирований;
-         *     слоты в прошлом не возвращаются.
-         *     Горизонт бронирования — 14 дней, включая сегодняшний: слоты позже
-         *     этого срока не возвращаются, даже если запрошен более широкий период.
-         */
-        get: operations["SlotRoutes_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Ручная активация Pro (заглушка подписки) */
+        ActivatePro: {
+            /**
+             * @description Код активации. Совпадает с BILLING_PRO_CODE или "pro-dev"
+             *     в development без переменной.
+             */
+            code: string;
+        };
+        /** @description 409 — email или slug уже заняты при регистрации */
+        AlreadyExistsError: {
+            /** @enum {string} */
+            code: "already_exists";
+            message: string;
+        };
+        AnalyticsSummary: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** Format: int32 */
+            created: number;
+            /** Format: int32 */
+            cancelled: number;
+            /**
+             * Format: int32
+             * @description Активные будущие на момент запроса
+             */
+            upcoming: number;
+            /** @description Число броней по ISO-дню недели 1..7 */
+            byWeekday: number[];
+        };
         /**
-         * @description Настройки доступности владельца: часовой пояс + набор недельных правил
+         * @description Настройки доступности владельца
          * @example {
          *       "timezone": "Europe/Moscow",
+         *       "bufferMinutes": 15,
          *       "rules": [
          *         {
          *           "weekday": 1,
          *           "startTime": "10:00",
-         *           "endTime": "18:00"
+         *           "endTime": "13:00"
          *         },
          *         {
-         *           "weekday": 3,
-         *           "startTime": "10:00",
-         *           "endTime": "14:00"
+         *           "weekday": 1,
+         *           "startTime": "14:00",
+         *           "endTime": "18:00"
+         *         }
+         *       ],
+         *       "exceptions": [
+         *         {
+         *           "date": "2026-01-01",
+         *           "intervals": []
          *         }
          *       ]
          *     }
@@ -148,11 +567,34 @@ export interface components {
         Availability: {
             /** @description Часовой пояс владельца, IANA-идентификатор (например, Europe/Moscow) */
             timezone: string;
+            /**
+             * Format: int32
+             * @description Буфер до и после каждой активной встречи (минуты, кратно 15).
+             *     В это время новые слоты не предлагаются.
+             */
+            bufferMinutes: number;
             rules: components["schemas"]["AvailabilityRule"][];
+            /** @description Праздники, отпуска и разовые переопределения дней */
+            exceptions: components["schemas"]["AvailabilityException"][];
+        };
+        /**
+         * @description Исключение из недельного расписания на конкретную дату
+         *     (праздник, отпуск, особый день приёма).
+         *     Пустой `intervals` — день полностью недоступен.
+         */
+        AvailabilityException: {
+            /**
+             * Format: date
+             * @description Дата YYYY-MM-DD в календаре владельца
+             */
+            date: string;
+            /** @description Рабочие интервалы в этот день; [] = выходной */
+            intervals: components["schemas"]["DayInterval"][];
         };
         /**
          * @description Правило доступности: повторяющийся недельный интервал,
          *     в котором владелец готов принимать звонки (например, Пн 10:00–18:00).
+         *     Перерыв внутри дня = два непересекающихся правила в один weekday.
          */
         AvailabilityRule: {
             /**
@@ -166,20 +608,61 @@ export interface components {
             endTime: string;
         };
         /**
-         * @description Бронирование: гость занял конкретный слот под конкретный тип события
+         * @description Бронирование для владельца (без секретного токена гостя)
          * @example {
          *       "id": 1,
          *       "eventTypeId": 1,
+         *       "eventTypeName": "Вводный звонок",
          *       "startsAt": "2026-07-27T10:00:00Z",
          *       "endsAt": "2026-07-27T10:30:00Z",
          *       "guestName": "Иван Петров",
          *       "guestEmail": "ivan@example.com",
          *       "comment": "Хочу обсудить проект",
          *       "status": "active",
+         *       "paymentStatus": "none",
          *       "createdAt": "2026-07-21T12:00:00Z"
          *     }
          */
         Booking: {
+            /** Format: int32 */
+            id: number;
+            /** Format: int32 */
+            eventTypeId: number;
+            /** @description Название типа события на момент ответа (для списков владельца) */
+            eventTypeName: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            guestName: string;
+            /** Format: email */
+            guestEmail: string;
+            /** @description Комментарий гостя владельцу (тема звонка и т. п.) */
+            comment?: string;
+            status: components["schemas"]["BookingStatus"];
+            paymentStatus: components["schemas"]["PaymentStatus"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @description Данные для создания бронирования гостем */
+        BookingCreate: {
+            /** Format: int32 */
+            eventTypeId: number;
+            /**
+             * Format: date-time
+             * @description Начало выбранного слота, UTC. Должно совпадать со слотом из GET …/slots.
+             */
+            startsAt: string;
+            guestName: string;
+            /** Format: email */
+            guestEmail: string;
+            comment?: string;
+        };
+        /**
+         * @description Ответ при создании брони: обычные поля + секретный токен
+         *     для отмены/переноса гостем (ссылка /b/{manageToken}).
+         */
+        BookingCreated: {
             /** Format: int32 */
             id: number;
             /** Format: int32 */
@@ -191,33 +674,80 @@ export interface components {
             guestName: string;
             /** Format: email */
             guestEmail: string;
-            /** @description Комментарий гостя владельцу (тема звонка и т. п.) */
             comment?: string;
             status: components["schemas"]["BookingStatus"];
+            paymentStatus: components["schemas"]["PaymentStatus"];
             /** Format: date-time */
             createdAt: string;
+            /** @description Секретный токен управления встречей гостем */
+            manageToken: string;
+            /** @description URL оплаты, если тип события платный и статус pending */
+            paymentUrl?: string;
         };
-        /** @description Данные для создания бронирования гостем */
-        BookingCreate: {
+        /** @description Перенос встречи гостем на другой свободный слот того же типа */
+        BookingReschedule: {
+            /** Format: date-time */
+            startsAt: string;
+        };
+        /** @description Серия повторяющихся встреч (тьютор ↔ ученик), еженедельно */
+        BookingSeries: {
+            /** Format: int32 */
+            id: number;
             /** Format: int32 */
             eventTypeId: number;
-            /**
-             * Format: date-time
-             * @description Начало выбранного слота, UTC. Должно совпадать со слотом из GET /api/slots.
-             */
-            startsAt: string;
             guestName: string;
             /** Format: email */
             guestEmail: string;
             comment?: string;
+            /**
+             * Format: date-time
+             * @description Первый старт серии, UTC
+             */
+            startsAt: string;
+            /**
+             * Format: int32
+             * @description Число встреч в серии (1–52)
+             */
+            count: number;
+            /** @description Созданные брони (id) */
+            bookingIds: number[];
+        };
+        BookingSeriesCreate: {
+            /** Format: int32 */
+            eventTypeId: number;
+            guestName: string;
+            /** Format: email */
+            guestEmail: string;
+            comment?: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: int32 */
+            count: number;
         };
         /** @enum {string} */
         BookingStatus: "active" | "cancelled";
+        /** @description Подключённый источник занятости (busy) */
+        CalendarConnection: {
+            /** Format: int32 */
+            id: number;
+            kind: components["schemas"]["CalendarConnectionKind"];
+            /** @description Для ICS — URL; для Google — email календаря или "primary" */
+            label: string;
+            /** Format: date-time */
+            lastSyncedAt?: string;
+        };
+        /** @enum {string} */
+        CalendarConnectionKind: "google" | "ics";
         /** @description 409 — конфликт: слот уже занят или находится в прошлом */
         ConflictError: {
             /** @enum {string} */
             code: "slot_unavailable";
             message: string;
+        };
+        /** @description Интервал времени в пределах одного календарного дня (локальное время владельца) */
+        DayInterval: {
+            startTime: string;
+            endTime: string;
         };
         /**
          * @description Тип события — то, на что гость записывается (например, «Вводный звонок»)
@@ -225,7 +755,8 @@ export interface components {
          *       "id": 1,
          *       "name": "Вводный звонок",
          *       "description": "Знакомство и обсуждение задачи",
-         *       "durationMinutes": 30
+         *       "durationMinutes": 30,
+         *       "priceRub": 0
          *     }
          */
         EventType: {
@@ -235,15 +766,64 @@ export interface components {
             description?: string;
             /**
              * Format: int32
-             * @description Длительность встречи в минутах. В MVP всегда 30.
-             * @default 30
+             * @description Длительность встречи в минутах: 15–240, кратно 15.
+             *     От неё зависят длина слота и шаг сетки при вычислении свободного времени.
              */
             durationMinutes: number;
+            /**
+             * Format: int32
+             * @description Цена в рублях; 0 — бесплатно
+             */
+            priceRub: number;
+        };
+        /** @description Создание / обновление типа события владельцем */
+        EventTypeWrite: {
+            name: string;
+            description?: string;
+            /** Format: int32 */
+            durationMinutes: number;
+            /** Format: int32 */
+            priceRub?: number;
         };
         /** @description Ошибка одного поля при валидации */
         FieldError: {
             field: string;
             message: string;
+        };
+        /** @description 403 — нужна подписка Pro */
+        ForbiddenError: {
+            /** @enum {string} */
+            code: "forbidden";
+            message: string;
+        };
+        GoogleAuthStart: {
+            /** @description URL для OAuth-редиректа пользователя в Google */
+            authUrl: string;
+        };
+        /** @description Карточка встречи для гостя по секретному токену */
+        GuestBooking: {
+            /** Format: int32 */
+            id: number;
+            eventTypeName: string;
+            /** Format: int32 */
+            durationMinutes: number;
+            ownerName: string;
+            ownerSlug: string;
+            ownerTimezone: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            guestName: string;
+            /** Format: email */
+            guestEmail: string;
+            comment?: string;
+            status: components["schemas"]["BookingStatus"];
+            paymentStatus: components["schemas"]["PaymentStatus"];
+        };
+        IcsConnectionCreate: {
+            url: string;
+            label: string;
         };
         /** @description 404 — ресурс не найден */
         NotFoundError: {
@@ -251,12 +831,65 @@ export interface components {
             code: "not_found";
             message: string;
         };
+        /** @description Настройки уведомлений владельца */
+        NotificationSettings: {
+            /** @description Письма о новых / отменённых / перенесённых встречах и напоминания */
+            emailEnabled: boolean;
+            /**
+             * @description Chat id Telegram для уведомлений владельцу.
+             *     Пустая строка / отсутствие — Telegram выключен.
+             */
+            telegramChatId?: string;
+            /**
+             * Format: int32
+             * @description За сколько часов до встречи слать напоминание гостю и владельцу (1–168)
+             */
+            reminderHoursBefore: number;
+        };
+        /** @enum {string} */
+        OrgRole: "owner" | "member";
+        Organization: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            /**
+             * Format: int32
+             * @description Владелец-создатель организации
+             */
+            ownerId: number;
+        };
+        OrganizationCreate: {
+            name: string;
+        };
+        OrganizationInvite: {
+            token: string;
+            /** @description Ссылка для принявшего приглашение (фронт /team/join?token=) */
+            joinPath: string;
+        };
+        OrganizationInviteCreate: {
+            /** Format: email */
+            email: string;
+        };
+        OrganizationJoin: {
+            token: string;
+        };
+        OrganizationMember: {
+            /** Format: int32 */
+            ownerId: number;
+            name: string;
+            email: string;
+            slug: string;
+            role: components["schemas"]["OrgRole"];
+        };
         /**
-         * @description Владелец календаря. В MVP владелец один, создаётся при инициализации приложения.
+         * @description Владелец календаря. Создаётся через регистрацию; публичная страница —
+         *     /u/{slug} на фронтенде и /api/public/{slug} в API.
          * @example {
          *       "id": 1,
          *       "name": "Кирилл Чистов",
-         *       "email": "owner@example.com"
+         *       "email": "owner@example.com",
+         *       "slug": "kirill",
+         *       "plan": "free"
          *     }
          */
         Owner: {
@@ -266,7 +899,54 @@ export interface components {
             name: string;
             /** Format: email */
             email: string;
+            /**
+             * @description Публичный идентификатор в URL: латиница, цифры, дефис;
+             *     2–32 символа, начинается и заканчивается буквой или цифрой.
+             */
+            slug: string;
+            /** @description Тариф: free или pro (команда, sync, аналитика, серии) */
+            plan: components["schemas"]["Plan"];
         };
+        /** @description Данные регистрации нового владельца */
+        OwnerCreate: {
+            name: string;
+            /** Format: email */
+            email: string;
+            password: string;
+            slug: string;
+        };
+        /**
+         * @description Публичный профиль владельца для гостевой страницы бронирования
+         * @example {
+         *       "id": 1,
+         *       "name": "Кирилл Чистов",
+         *       "slug": "kirill",
+         *       "timezone": "Europe/Moscow"
+         *     }
+         */
+        OwnerPublic: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            slug: string;
+            /** @description IANA-таймзона владельца (в ней заданы правила доступности) */
+            timezone: string;
+        };
+        PaymentInfo: {
+            /** Format: int32 */
+            id: number;
+            /** Format: int32 */
+            bookingId: number;
+            /** Format: int32 */
+            amountRub: number;
+            status: components["schemas"]["PaymentStatus"];
+            /** @description URL оплаты (YooKassa или stub) */
+            confirmationUrl: string;
+        };
+        /** @enum {string} */
+        PaymentStatus: "none" | "pending" | "paid" | "failed";
+        /** @enum {string} */
+        Plan: "free" | "pro";
         /** @description Активная сессия */
         Session: {
             owner: components["schemas"]["Owner"];
@@ -278,8 +958,8 @@ export interface components {
             password: string;
         };
         /**
-         * @description Свободный 30-минутный слот. Вычисляется на лету из правил доступности
-         *     за вычетом активных бронирований — в базе не хранится.
+         * @description Свободный слот. Вычисляется на лету из правил доступности и длительности
+         *     выбранного типа события за вычетом активных бронирований — в базе не хранится.
          * @example {
          *       "startsAt": "2026-07-27T10:00:00Z",
          *       "endsAt": "2026-07-27T10:30:00Z"
@@ -293,7 +973,7 @@ export interface components {
             startsAt: string;
             /**
              * Format: date-time
-             * @description Конец слота, UTC (startsAt + 30 минут)
+             * @description Конец слота, UTC (startsAt + durationMinutes типа события)
              */
             endsAt: string;
         };
@@ -319,6 +999,56 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    AnalyticsRoutes_summary: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsSummary"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
     AvailabilityRoutes_getAvailability: {
         parameters: {
             query?: never;
@@ -390,7 +1120,194 @@ export interface operations {
             };
         };
     };
-    BookingRoutes_list: {
+    BillingRoutes_activatePro: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivatePro"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    BookingSeriesRoutes_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingSeries"][];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+        };
+    };
+    BookingSeriesRoutes_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingSeriesCreate"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingSeries"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 409 — конфликт: слот уже занят или находится в прошлом */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    BookingSeriesRoutes_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description There is no content to send for this request, but the headers may be useful. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    OwnerBookingRoutes_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -419,49 +1336,7 @@ export interface operations {
             };
         };
     };
-    BookingRoutes_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BookingCreate"];
-            };
-        };
-        responses: {
-            /** @description The request has succeeded and a new resource has been created as a result. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Booking"];
-                };
-            };
-            /** @description 409 — конфликт: слот уже занят или находится в прошлом */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConflictError"];
-                };
-            };
-            /** @description 422 — ошибка валидации входных данных */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationError"];
-                };
-            };
-        };
-    };
-    BookingRoutes_cancel: {
+    OwnerBookingRoutes_cancel: {
         parameters: {
             query?: never;
             header?: never;
@@ -499,7 +1374,230 @@ export interface operations {
             };
         };
     };
-    EventTypeRoutes_list: {
+    CalendarConnectionRoutes_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarConnection"][];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+        };
+    };
+    CalendarConnectionRoutes_startGoogle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleAuthStart"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+        };
+    };
+    CalendarConnectionRoutes_connectIcs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IcsConnectionCreate"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarConnection"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    CalendarConnectionRoutes_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description There is no content to send for this request, but the headers may be useful. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    CalendarConnectionRoutes_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarConnection"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    OwnerEventTypeRoutes_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -515,6 +1613,879 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventType"][];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+        };
+    };
+    OwnerEventTypeRoutes_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventTypeWrite"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventType"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OwnerEventTypeRoutes_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventTypeWrite"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventType"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OwnerEventTypeRoutes_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description There is no content to send for this request, but the headers may be useful. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    GuestBookingRoutes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestBooking"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    GuestBookingRoutes_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description There is no content to send for this request, but the headers may be useful. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    GuestBookingRoutes_reschedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingReschedule"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestBooking"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 409 — конфликт: слот уже занят или находится в прошлом */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    NotificationSettingsRoutes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+        };
+    };
+    NotificationSettingsRoutes_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationSettings"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OrganizationRoutes_listMine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"][];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+        };
+    };
+    OrganizationRoutes_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationCreate"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OrganizationRoutes_join: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationJoin"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OrganizationRoutes_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationInviteCreate"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInvite"];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    OrganizationRoutes_listMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMember"][];
+                };
+            };
+            /** @description 401 — нет активной сессии владельца или неверные учётные данные */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedError"];
+                };
+            };
+            /** @description 403 — нужна подписка Pro */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenError"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    OwnerRoutes_register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerCreate"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description 409 — email или slug уже заняты при регистрации */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlreadyExistsError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    PaymentRoutes_yookassaWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PaymentRoutes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentInfo"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    PaymentRoutes_stubConfirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentInfo"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    PublicRoutes_getOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerPublic"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    PublicRoutes_createBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingCreate"];
+            };
+        };
+        responses: {
+            /** @description The request has succeeded and a new resource has been created as a result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingCreated"];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 409 — конфликт: слот уже занят или находится в прошлом */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    PublicRoutes_listEventTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventType"][];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+        };
+    };
+    PublicRoutes_listSlots: {
+        parameters: {
+            query: {
+                eventTypeId: number;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request has succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Slot"][];
+                };
+            };
+            /** @description 404 — ресурс не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundError"];
+                };
+            };
+            /** @description 422 — ошибка валидации входных данных */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
                 };
             };
         };
@@ -605,40 +2576,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    SlotRoutes_list: {
-        parameters: {
-            query: {
-                /** @description Начало периода, YYYY-MM-DD */
-                from: string;
-                /** @description Конец периода, YYYY-MM-DD */
-                to: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The request has succeeded. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Slot"][];
-                };
-            };
-            /** @description 422 — ошибка валидации входных данных */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationError"];
-                };
             };
         };
     };

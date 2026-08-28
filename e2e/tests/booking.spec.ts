@@ -16,9 +16,9 @@ import {
  * Полный путь: типы событий -> дата -> слот -> форма -> подтверждение.
  */
 test('гость бронирует звонок: полный путь до подтверждения', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/u/kirill');
 
-  await expect(page.getByRole('heading', { name: 'Выберите время звонка' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Запись к / })).toBeVisible();
   await expect(page.getByText('Вводный звонок')).toBeVisible();
 
   const date = nextWorkday();
@@ -37,7 +37,7 @@ test('гость бронирует звонок: полный путь до п�
   await page.getByRole('button', { name: 'Забронировать', exact: true }).click();
 
   await expect(page.getByText('Встреча забронирована')).toBeVisible();
-  await expect(page.getByText(new RegExp(`, ${slotTime}$`))).toBeVisible();
+  await expect(page.getByText(new RegExp(slotTime))).toBeVisible();
   await expect(page.getByText(guest.email)).toBeVisible();
 });
 
@@ -69,7 +69,7 @@ test('второй гость получает ошибку, если слот �
   // Оба гостя открывают страницу и видят один и тот же первый слот
   const pageB = await context.newPage();
   for (const p of [page, pageB]) {
-    await p.goto('/');
+    await p.goto('/u/kirill');
     await selectDate(p, date);
     await expect(slotButtons(p).first()).toBeVisible();
   }
@@ -117,7 +117,7 @@ test('владелец видит бронь, отменяет её — слот
   await expect(page.getByRole('row').filter({ hasText: guest.name })).toHaveCount(0);
 
   // Слот снова доступен гостям
-  await page.goto('/');
+  await page.goto('/u/kirill');
   await selectDate(page, date);
   await expect(page.getByRole('button', { name: slotTime, exact: true })).toBeVisible();
 });
@@ -139,7 +139,7 @@ test('смена даты на шаге формы возвращает к вы�
   const date1 = nextWorkday();
   const date2 = workdayAfter(date1);
 
-  await page.goto('/');
+  await page.goto('/u/kirill');
   await selectDate(page, date1);
   await slotButtons(page).first().click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
@@ -168,7 +168,7 @@ test('смена даты на шаге формы возвращает к вы�
  * тоже возвращает к выбору слота, а не оставляет пустую карточку.
  */
 test('смена типа события на шаге формы возвращает к выбору слота', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/u/kirill');
   await selectDate(page, nextWorkday());
   await slotButtons(page).first().click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
@@ -184,7 +184,7 @@ test('смена типа события на шаге формы возвращ
  * Сценарий 8: горизонт бронирования — даты дальше 14 дней недоступны.
  */
 test('даты дальше горизонта 14 дней недоступны в календаре', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/u/kirill');
   await expect(slotButtons(page).first().or(page.getByText(/свободных слотов нет/))).toBeVisible();
 
   const beyond = new Date();
